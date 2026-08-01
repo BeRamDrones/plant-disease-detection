@@ -1,0 +1,65 @@
+"use client";
+import React, { useState } from "react";
+import { FileText, CheckCircle, Loader2, AlertTriangle } from "lucide-react";
+import styles from "./CompleteMissionButton.module.css";
+import { Detection, MissionData } from "@/lib/types";
+import { generateMissionSummary } from "@/lib/mockData";
+import { generateMissionPDF } from "@/lib/pdfReport";
+
+interface Props { mission: MissionData; detections: Detection[]; elapsed: number; }
+
+type State = "idle" | "generating" | "done" | "error";
+
+export default function CompleteMissionButton({ mission, detections, elapsed }: Props) {
+  const [state, setState] = useState<State>("idle");
+
+  const handleClick = async () => {
+    if (state !== "idle") return;
+    setState("generating");
+    try {
+      await new Promise(r => setTimeout(r, 800)); // brief loading feel
+      const summary = generateMissionSummary(detections, mission);
+      generateMissionPDF(summary, detections, elapsed);
+      setState("done");
+      setTimeout(() => setState("idle"), 4000);
+    } catch (e) {
+      console.error(e);
+      setState("error");
+      setTimeout(() => setState("idle"), 3000);
+    }
+  };
+
+  const label = {
+    idle:       "COMPLETE MISSION",
+    generating: "GENERATING REPORT…",
+    done:       "REPORT DOWNLOADED",
+    error:      "GENERATION FAILED",
+  }[state];
+
+  const Icon = {
+    idle:       FileText,
+    generating: Loader2,
+    done:       CheckCircle,
+    error:      AlertTriangle,
+  }[state];
+
+  return (
+    <button
+      className={`${styles.btn} ${styles[state]}`}
+      onClick={handleClick}
+      disabled={state !== "idle"}
+    >
+      {/* Animated ring */}
+      <span className={styles.ring}/>
+      <span className={styles.ring2}/>
+      <Icon
+        size={16}
+        className={state === "generating" ? styles.spinIcon : ""}
+      />
+      <span className={styles.label}>{label}</span>
+      {state === "done" && (
+        <span className={styles.subLabel}>PDF Saved to Downloads</span>
+      )}
+    </button>
+  );
+}

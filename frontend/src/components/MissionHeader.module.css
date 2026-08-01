@@ -1,0 +1,88 @@
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  height: 64px;
+  background: rgba(5,8,16,0.95);
+  border-bottom: 1px solid rgba(0,212,255,0.2);
+  backdrop-filter: blur(20px);
+  flex-shrink: 0;
+  position: relative;
+  z-index: 20;
+}
+.header::after {
+  content: "";
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,transparent,rgba(0,212,255,0.5),transparent);
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+.logo  { display: flex; align-items: center; }
+.title {
+  font-family: var(--font-hud);
+  font-size: 14px; font-weight: 800; letter-spacing: 0.15em;
+  color: var(--cyan);
+  text-shadow: 0 0 20px rgba(0,212,255,0.5);
+}
+.subtitle {
+  font-family: var(--font-hud);
+  font-size: 8px; font-weight: 500; letter-spacing: 0.2em;
+  color: var(--text-muted);
+  margin-top: 1px;
+}
+
+.center  { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.infoRow { display: flex; align-items: center; gap: 0; }
+.infoItem {
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 14px;
+}
+.divider {
+  width: 1px; height: 20px;
+  background: rgba(255,255,255,0.08);
+}
+.infoLabel {
+  font-family: var(--font-hud);
+  font-size: 9px; font-weight: 500; letter-spacing: 0.12em;
+  color: var(--text-muted);
+}
+.infoValue {
+  font-family: var(--font-hud);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  color: var(--text-primary);
+}
+.statusDot {
+  width: 6px; height: 6px; border-radius: 50%;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.timer {
+  font-family: var(--font-hud);
+  font-size: 22px; font-weight: 800; letter-spacing: 0.12em;
+  color: var(--cyan);
+  text-shadow: 0 0 20px rgba(0,212,255,0.4);
+  animation: flicker 8s infinite;
+}
+
+.telemetry { display: flex; align-items: center; gap: 20px; }
+.telItem   { display: flex; align-items: center; gap: 7px; }
+.telLabel  {
+  font-family: var(--font-hud);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  min-width: 28px;
+}
+
+.telBars  { display: flex; align-items: flex-end; gap: 2px; }
+.bar      { width: 4px; border-radius: 1px; transition: background 0.3s; }
+
+.batOuter {
+  width: 40px; height: 8px; border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.1);
+  overflow: hidden;
+}
+.batInner { height: 100%; border-radius: 1px; transition: width 0.5s ease, background 0.3s; }
