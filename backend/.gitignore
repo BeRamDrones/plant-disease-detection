@@ -59,3 +59,8 @@ media/
 # Temporary files
 *.tmp
 *.temp
+
+# Model weights
+*.pt
+weights/
+!weights/.gitkeep
