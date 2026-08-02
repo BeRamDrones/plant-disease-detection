@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   MapPin, Crosshair, Maximize2, Camera,
   Upload, Link2, RefreshCw, Play, Pause, Zap,
+  Video, VideoOff
 } from "lucide-react";
 import { InputMode } from "./InputModeSelector";
 import { RawDetection } from "@/hooks/useDetections";
@@ -22,6 +23,8 @@ interface Props {
   /** Called with raw detection results from the backend inference endpoint */
   onDetections: (raws: RawDetection[]) => void;
   scanInterval?: number;
+  /** Called when the live camera active state changes (live mode only) */
+  onCameraActive?: (active: boolean) => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -136,7 +139,7 @@ function ImageMode({
 function VideoMode({
   modelReady,
   onDetections,
-  scanInterval = 3,
+  scanInterval = 1,
 }: {
   modelReady: boolean;
   onDetections: (raws: RawDetection[]) => void;
@@ -214,6 +217,15 @@ function VideoMode({
     };
   }, [scanning, src, modelReady, captureAndInfer]);
 
+  // Auto-start scanning when the model finishes loading and a file is already loaded
+  useEffect(() => {
+    if (modelReady && src) {
+      setScanning(true);
+    }
+    // Only react to modelReady transitions — don't interfere when src or scanning change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelReady]);
+
   const toggleScan = () => {
     setScanning(s => !s);
   };
@@ -284,62 +296,90 @@ function VideoMode({
 // LIVE UAV MODE
 // ─────────────────────────────────────────────────────────────────────────────
 function LiveUAVMode({
-  altitude, speed, lat, lon, modelReady, onDetections, scanInterval = 4,
+  altitude, speed, lat, lon, modelReady, onDetections, onCameraActive, scanInterval = 1,
 }: {
   altitude: number; speed: number; lat: number; lon: number;
   modelReady: boolean;
   onDetections: (raws: RawDetection[]) => void;
+  onCameraActive?: (active: boolean) => void;
   scanInterval?: number;
 }) {
-  const videoRef    = useRef<HTMLVideoElement>(null);
-  const canvasRef   = useRef<HTMLCanvasElement>(null);
-  const wrapRef     = useRef<HTMLDivElement>(null);
-  const captureRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoRef      = useRef<HTMLVideoElement>(null);
+  const canvasRef     = useRef<HTMLCanvasElement>(null);
+  const wrapRef       = useRef<HTMLDivElement>(null);
+  const captureRef    = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [camStatus,        setCamStatus]        = useState<"requesting"|"active"|"unavailable">("requesting");
-  const [useSimulatedFeed, setUseSimulatedFeed] = useState(false);
-  const [rtspUrl,          setRtspUrl]          = useState("");
-  const [showRtsp,         setShowRtsp]         = useState(false);
-  const [autoCapture,      setAutoCapture]      = useState(false);
-  const [lastResult,       setLastResult]       = useState<string | null>(null);
+  // camStatus:
+  //   "requesting" — waiting for getUserMedia
+  //   "active"     — real webcam stream is live
+  //   "unavailable" — permission denied / no hardware
+  //   "closed"     — user explicitly toggled camera off
+  const [camStatus,   setCamStatus]   = useState<"requesting"|"active"|"unavailable"|"closed">("requesting");
+  const [camOn,       setCamOn]       = useState(true);
+  const [rtspUrl,     setRtspUrl]     = useState("");
+  const [showRtsp,    setShowRtsp]    = useState(false);
+  const [autoCapture, setAutoCapture] = useState(false);
+  const [lastResult,  setLastResult]  = useState<string | null>(null);
 
-  // Start webcam or fallback
+  // The camera is only truly usable when camOn AND we have a real stream
+  const cameraIsLive = camStatus === "active";
+
+  // Notify parent whenever camera liveness changes
   useEffect(() => {
+    onCameraActive?.(cameraIsLive);
+  }, [cameraIsLive, onCameraActive]);
+
+  // Start / stop the real webcam stream
+  useEffect(() => {
+    if (!camOn) {
+      // Stop any existing track and mark closed
+      if (videoRef.current?.srcObject) {
+        (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
+        videoRef.current.srcObject = null;
+      }
+      setCamStatus("closed");
+      setAutoCapture(false);
+      setLastResult(null);
+      return;
+    }
+
     let stream: MediaStream | null = null;
-    
-    if (typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    setCamStatus("requesting");
+
+    if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
       navigator.mediaDevices.getUserMedia({ video: true })
         .then(s => {
           stream = s;
           if (videoRef.current) videoRef.current.srcObject = s;
           setCamStatus("active");
-          setUseSimulatedFeed(false);
         })
         .catch(() => {
-          // Camera permission blocked or camera not found → fallback to simulation
-          setUseSimulatedFeed(true);
-          setCamStatus("active");
+          // Permission denied or no camera hardware
+          setCamStatus("unavailable");
+          setAutoCapture(false);
         });
     } else {
-      // Non-secure origin / API not available → fallback to simulation
-      setUseSimulatedFeed(true);
-      setCamStatus("active");
+      // Non-secure origin / API not available
+      setCamStatus("unavailable");
+      setAutoCapture(false);
     }
 
     return () => {
       stream?.getTracks().forEach(t => t.stop());
-      if (captureRef.current) clearInterval(captureRef.current);
     };
-  }, []);
+  }, [camOn]);
 
-  // Capture a frame and send to backend
+  // Capture a real frame from the webcam and send to backend
   const captureFrame = useCallback(async () => {
     const video  = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas || !modelReady) return;
+    // Strict guard: only run inference when camera is genuinely streaming
+    if (!camOn || camStatus !== "active" || !canvas || !modelReady || !video) return;
+
     canvas.width  = video.videoWidth  || 640;
     canvas.height = video.videoHeight || 360;
     canvas.getContext("2d")?.drawImage(video, 0, 0);
+
     canvas.toBlob(async blob => {
       if (!blob) return;
       try {
@@ -352,11 +392,11 @@ function LiveUAVMode({
         );
       } catch { setLastResult("Backend error"); }
     }, "image/jpeg", 0.85);
-  }, [modelReady, onDetections]);
+  }, [camOn, camStatus, modelReady, onDetections]);
 
-  // Reactive scan manager
+  // Reactive scan manager — only runs when camera is genuinely live
   useEffect(() => {
-    if (autoCapture && camStatus === "active" && modelReady) {
+    if (autoCapture && cameraIsLive && modelReady) {
       captureFrame();
       captureRef.current = setInterval(captureFrame, scanInterval * 1000);
     } else {
@@ -372,20 +412,20 @@ function LiveUAVMode({
         captureRef.current = null;
       }
     };
-  }, [autoCapture, camStatus, modelReady, scanInterval, captureFrame]);
+  }, [autoCapture, cameraIsLive, modelReady, scanInterval, captureFrame]);
 
-  // Automatically start live scan when stream gets connected
+  // Auto-start scanning once the real camera stream is live and model is ready
   useEffect(() => {
-    if (camStatus === "active" && modelReady) {
+    if (cameraIsLive && modelReady) {
       setAutoCapture(true);
+    } else {
+      // Stop scanning whenever camera goes offline
+      setAutoCapture(false);
     }
-  }, [camStatus, modelReady]);
+  }, [cameraIsLive, modelReady]);
 
-  const toggleAutoCapture = () => {
-    setAutoCapture(v => !v);
-  };
-
-  const toggleFullscreen = () => {
+  const toggleAutoCapture = () => setAutoCapture(v => !v);
+  const toggleFullscreen  = () => {
     if (!document.fullscreenElement && wrapRef.current) wrapRef.current.requestFullscreen();
     else document.exitFullscreen();
   };
@@ -394,15 +434,13 @@ function LiveUAVMode({
     <div className={styles.wrap} ref={wrapRef}>
       <canvas ref={canvasRef} hidden />
 
-      {/* Camera source */}
-      {camStatus === "active" ? (
+      {/* Camera source — only the real webcam video element */}
+      {cameraIsLive ? (
         <video
           ref={videoRef}
-          src={useSimulatedFeed ? "https://assets.mixkit.co/videos/preview/mixkit-drone-shot-of-a-green-crop-field-42426-large.mp4" : undefined}
           autoPlay
           playsInline
           muted
-          loop
           crossOrigin="anonymous"
           className={styles.video}
         />
@@ -410,13 +448,23 @@ function LiveUAVMode({
         <div className={styles.placeholder}>
           <div className={styles.noise} />
           <div className={styles.noSignalText}>
-            {camStatus === "requesting" ? (
+            {camStatus === "requesting" && (
               <><div className={styles.spinner} /><span>ESTABLISHING LINK…</span></>
-            ) : (
+            )}
+            {camStatus === "closed" && (
               <>
-                <Camera size={40} color="rgba(0,212,255,0.3)" />
-                <span>NO CAMERA SIGNAL</span>
-                <span className={styles.noSigSub}>Awaiting drone video feed</span>
+                <VideoOff size={40} color="rgba(239,68,68,0.4)" />
+                <span style={{ color: "#ef4444", letterSpacing: "0.15em" }}>CAMERA IS CLOSED</span>
+                <span className={styles.noSigSub}>UAV drone survey stream feed is shut down</span>
+                <span className={styles.noSigSub} style={{ color: "rgba(239,68,68,0.3)" }}>AI detection is paused — reopen camera to resume</span>
+              </>
+            )}
+            {camStatus === "unavailable" && (
+              <>
+                <VideoOff size={40} color="rgba(245,158,11,0.4)" />
+                <span style={{ color: "#f59e0b", letterSpacing: "0.15em" }}>NO CAMERA DETECTED</span>
+                <span className={styles.noSigSub}>No camera hardware or permission was found</span>
+                <span className={styles.noSigSub} style={{ color: "rgba(245,158,11,0.25)" }}>Allow camera access in your browser to begin detection</span>
               </>
             )}
           </div>
@@ -445,8 +493,8 @@ function LiveUAVMode({
         </div>
       )}
 
-      {/* Last detection result badge */}
-      {lastResult && (
+      {/* Last detection result badge — only shown when camera is active */}
+      {lastResult && cameraIsLive && (
         <div className={styles.liveResultBadge}>
           <Zap size={9} color="#00d4ff" />
           {lastResult}
@@ -462,33 +510,40 @@ function LiveUAVMode({
       <div className={`${styles.corner} ${styles.bl}`} />
       <div className={`${styles.corner} ${styles.br}`} />
 
-      {/* Center crosshair */}
-      <div className={styles.crosshair}>
-        <Crosshair size={32} color="rgba(0,212,255,0.5)" strokeWidth={0.8} />
-      </div>
+      {/* Center crosshair — only when live */}
+      {cameraIsLive && (
+        <div className={styles.crosshair}>
+          <Crosshair size={32} color="rgba(0,212,255,0.5)" strokeWidth={0.8} />
+        </div>
+      )}
 
       {/* Top HUD */}
       <div className={styles.topHud}>
         <div className={styles.hudChip}>
           <span className={styles.hudLabel}>REC</span>
-          <span className={styles.recDot} />
+          <span className={styles.recDot} style={{ background: cameraIsLive ? "#ef4444" : "#475569", animationPlayState: cameraIsLive ? "running" : "paused" }} />
         </div>
         <div className={styles.hudChip}>
           <span className={styles.hudLabel}>CAM</span>
-          <span className={styles.hudValue} style={{ color: camStatus === "active" ? "#10b981" : "#ef4444" }}>
-            {camStatus === "active" ? (useSimulatedFeed ? "SIMULATION" : "LIVE") : "OFFLINE"}
+          <span
+            className={styles.hudValue}
+            style={{
+              color: cameraIsLive ? "#10b981" : camStatus === "unavailable" ? "#f59e0b" : "#ef4444"
+            }}
+          >
+            {cameraIsLive ? "LIVE" : camStatus === "closed" ? "CLOSED" : camStatus === "unavailable" ? "NO CAMERA" : "CONNECTING"}
           </span>
         </div>
         <div className={styles.hudChip}>
           <span className={styles.hudLabel}>AI</span>
-          <span className={styles.hudValue} style={{ color: autoCapture ? "#22c55e" : "#94a3b8" }}>
-            {autoCapture ? "SCANNING" : "IDLE"}
+          <span className={styles.hudValue} style={{ color: autoCapture && cameraIsLive ? "#22c55e" : "#94a3b8" }}>
+            {autoCapture && cameraIsLive ? "SCANNING" : cameraIsLive ? "IDLE" : "PAUSED"}
           </span>
         </div>
         <div className={styles.spacer} />
 
-        {/* AI scan toggle */}
-        {modelReady && camStatus === "active" && (
+        {/* AI scan toggle — only when camera is live */}
+        {modelReady && cameraIsLive && (
           <button
             className={`${styles.fsBtn} ${autoCapture ? styles.fsBtnActive : ""}`}
             onClick={toggleAutoCapture}
@@ -498,8 +553,8 @@ function LiveUAVMode({
           </button>
         )}
 
-        {/* Manual capture */}
-        {modelReady && camStatus === "active" && (
+        {/* Manual capture — only when camera is live */}
+        {modelReady && cameraIsLive && (
           <button className={styles.fsBtn} onClick={captureFrame} title="Capture & analyse frame now">
             <Camera size={13} color="#00d4ff" />
           </button>
@@ -508,6 +563,24 @@ function LiveUAVMode({
         <button className={styles.fsBtn} onClick={() => setShowRtsp(v => !v)} title="RTSP URL">
           <Link2 size={13} color="#94a3b8" />
         </button>
+
+        {/* Camera Power Toggle */}
+        <button
+          className={styles.fsBtn}
+          onClick={() => setCamOn(v => !v)}
+          title={camOn ? "Close Camera Stream" : "Open Camera Stream"}
+          style={{
+            borderColor: !camOn ? "rgba(239,68,68,0.3)" : undefined,
+            background:  !camOn ? "rgba(239,68,68,0.06)" : undefined
+          }}
+        >
+          {camOn && cameraIsLive ? (
+            <Video size={13} color="#10b981" />
+          ) : (
+            <VideoOff size={13} color="#ef4444" />
+          )}
+        </button>
+
         <button className={styles.fsBtn} onClick={toggleFullscreen} title="Fullscreen">
           <Maximize2 size={13} color="#94a3b8" />
         </button>
@@ -544,7 +617,7 @@ function LiveUAVMode({
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
-export default function CameraFeed({ altitude, speed, lat, lon, mode, modelReady, onDetections, scanInterval }: Props) {
+export default function CameraFeed({ altitude, speed, lat, lon, mode, modelReady, onDetections, onCameraActive, scanInterval }: Props) {
   return (
     <div className={styles.container}>
       {mode === "image" && (
@@ -558,6 +631,7 @@ export default function CameraFeed({ altitude, speed, lat, lon, mode, modelReady
           altitude={altitude} speed={speed} lat={lat} lon={lon}
           modelReady={modelReady}
           onDetections={onDetections}
+          onCameraActive={onCameraActive}
           scanInterval={scanInterval}
         />
       )}

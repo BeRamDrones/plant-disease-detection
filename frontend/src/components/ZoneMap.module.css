@@ -1,33 +1,213 @@
 .wrap {
-  background:var(--bg-glass); backdrop-filter:blur(16px);
-  border:1px solid var(--border-cyan); border-radius:var(--radius-md);
-  padding:12px; display:flex; flex-direction:column; gap:10px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border-cyan);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 210px;
 }
-.header { display:flex; align-items:center; gap:6px; }
-.title { font-family:var(--font-hud); font-size:10px; font-weight:700; letter-spacing:0.12em; color:var(--cyan); }
 
+/* ── Header ── */
+.hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.hdrLeft { display: flex; align-items: center; gap: 6px; }
+.hdrRight { display: flex; align-items: center; }
+
+.title {
+  font-family: var(--font-hud);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  color: var(--cyan);
+}
+.scanBadge {
+  font-family: var(--font-hud);
+  font-size: 8px; font-weight: 700; letter-spacing: 0.1em;
+  color: #f59e0b;
+  background: rgba(245,158,11,0.1);
+  border: 1px solid rgba(245,158,11,0.3);
+  border-radius: 4px;
+  padding: 1px 6px;
+  animation: badgePulse 1.2s ease-in-out infinite;
+}
+.activeBadge {
+  font-family: var(--font-hud);
+  font-size: 8px; font-weight: 700; letter-spacing: 0.08em;
+  color: #00d4ff;
+  background: rgba(0,212,255,0.1);
+  border: 1px solid rgba(0,212,255,0.25);
+  border-radius: 4px;
+  padding: 1px 6px;
+}
+
+@keyframes badgePulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.55; }
+}
+
+/* ── Dynamic grid ── */
 .grid {
-  display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr);
-  gap:5px;
-}
-.cell {
-  aspect-ratio:1.2;
-  border-radius:6px; border:1px solid;
-  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-  position:relative; overflow:hidden;
-  transition: all 0.4s ease;
-  cursor:default;
-}
-.cell.active { box-shadow:0 0 10px var(--zone-color,transparent); }
-.cellLabel { font-family:var(--font-hud); font-size:10px; font-weight:700; color:var(--text-secondary); z-index:1; }
-.detCount  { font-family:var(--font-hud); font-size:9px; font-weight:600; z-index:1; }
-.cellGlow  {
-  position:absolute; bottom:-6px; left:50%; transform:translateX(-50%);
-  width:60%; height:12px;
-  border-radius:50%; filter:blur(8px); opacity:0.5;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+  flex: 1;
 }
 
-.legend { display:flex; gap:10px; justify-content:center; }
-.legendItem { display:flex; align-items:center; gap:4px; }
-.legendItem span { font-family:var(--font-hud); font-size:8px; color:var(--text-muted); letter-spacing:0.06em; }
-.legendDot { width:6px; height:6px; border-radius:50%; }
+/* ── Cell ── */
+.cell {
+  border-radius: 6px;
+  border: 1px solid;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+  position: relative;
+  overflow: hidden;
+  transition: all 0.35s ease;
+  animation: slide-in-up 0.35s cubic-bezier(.16,1,.3,1) both;
+  box-shadow: 0 0 12px var(--zone-color, transparent), inset 0 0 18px rgba(0,0,0,0.3);
+}
+
+.cellGlow {
+  position: absolute;
+  bottom: -10px; left: 50%;
+  transform: translateX(-50%);
+  width: 80%; height: 16px;
+  border-radius: 50%;
+  filter: blur(12px);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.cellTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.cellLabel {
+  font-family: var(--font-hud);
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+}
+
+.formedBadge {
+  font-family: var(--font-hud);
+  font-size: 7px; font-weight: 700; letter-spacing: 0.06em;
+  color: #10b981;
+  background: rgba(16,185,129,0.12);
+  border: 1px solid rgba(16,185,129,0.3);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+.cellBody {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.classText {
+  font-family: var(--font-hud);
+  font-size: 11px; font-weight: 800; letter-spacing: 0.05em;
+  line-height: 1.2;
+}
+
+.countBadge {
+  font-family: var(--font-hud);
+  font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 1px 5px;
+  width: fit-content;
+}
+
+.confBar {
+  height: 2px;
+  border-radius: 1px;
+  background: rgba(255,255,255,0.06);
+  overflow: hidden;
+}
+
+.confFill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.4s ease;
+  opacity: 0.8;
+}
+
+/* ── Empty state (no runtime zones formed yet) ── */
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 12px;
+  text-align: center;
+  gap: 6px;
+  background: rgba(0,212,255,0.02);
+  border: 1px dashed rgba(0,212,255,0.15);
+  border-radius: 6px;
+}
+
+.radarWrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 4px;
+}
+
+.radarSpin {
+  animation: spin 3s linear infinite;
+}
+
+.radarPulse {
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 1px solid rgba(0,212,255,0.3);
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+.emptyTitle {
+  font-family: var(--font-hud);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  color: #f59e0b;
+}
+
+.emptySub {
+  font-size: 9.5px;
+  color: var(--text-muted);
+  max-width: 280px;
+  line-height: 1.4;
+}
+
+/* ── Footer ── */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-top: 2px;
+}
+
+.footerEmpty {
+  font-family: var(--font-hud);
+  font-size: 8px; font-weight: 500; letter-spacing: 0.08em;
+  color: #334155;
+}
+
+.footStat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.footStat span {
+  font-family: var(--font-hud);
+  font-size: 8.5px; font-weight: 600; letter-spacing: 0.06em;
+}

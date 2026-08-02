@@ -248,9 +248,26 @@ class DiseaseDetectionPipeline:
                     if probs is None:
                         continue
 
-                    # top-5 results give a fuller picture of the crop/disease state
-                    top5_indices = probs.top5        # list of 5 class indices
-                    top5_confs   = probs.top5conf    # tensor of 5 confidences
+                    # Extract top-5 class indices and their confidence scores
+                    top5_indices = probs.top5      # list[int]  — top-5 class indices
+                    top5_confs   = probs.top5conf  # Tensor     — top-5 confidence values
+
+                    top_idx = int(top5_indices[0])
+                    top_conf = float(top5_confs[0])
+                    top_name = names.get(top_idx, "").lower().replace("_", "")
+
+                    # Any prediction with confidence < 0.90 or background class is classified as notaleaf
+                    if top_conf < 0.90 or top_name in ["notaleaf", "background", "unknown"]:
+                        logger.info(f"[Real Inference] Top prediction '{top_name}' conf={top_conf:.2f} (<0.90) — classifying as 'notaleaf'.")
+                        return [{
+                            "detected_class":   "notaleaf",
+                            "confidence_score": round(top_conf, 4),
+                            "x_center":        0.5,
+                            "y_center":        0.5,
+                            "rank":            1,
+                            "plant_class":     "notaleaf",
+                            "model_name":      "best.pt",
+                        }]
 
                     for rank, (cls_idx, conf_t) in enumerate(
                         zip(top5_indices, top5_confs)
@@ -258,12 +275,16 @@ class DiseaseDetectionPipeline:
                         cls_name = names.get(int(cls_idx), f"class_{cls_idx}")
                         conf     = float(conf_t)
 
+                        # Skip background classes
+                        if cls_name.lower().replace("_", "") in ["notaleaf", "background", "unknown"]:
+                            continue
+
                         # Only include results with meaningful confidence
                         if conf < 0.01:
                             continue
 
                         detections.append({
-                            "detected_class":   cls_name,
+                            "detected_class":   cls_name if conf >= 0.90 else "notaleaf",
                             "confidence_score": round(conf, 4),
                             "x_center":        0.5,          # classification has no bbox
                             "y_center":        0.5,

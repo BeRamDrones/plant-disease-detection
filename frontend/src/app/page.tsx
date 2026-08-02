@@ -62,14 +62,16 @@ export default function MissionDashboard() {
 
   const [activeNav, setActiveNav] = useState<string>("dashboard");
   const [inputMode, setInputMode] = useState<InputMode>("live");
+  // Tracks whether the live UAV camera is actively streaming
+  const [liveCamera, setLiveCamera] = useState(false);
 
   // ── Search & Filter State for DATA View ──
   const [searchQuery, setSearchQuery] = useState("");
   const [classFilter, setClassFilter] = useState<"all" | "diseased" | "healthy">("all");
 
   // ── Config State for CFG View ──
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.25);
-  const [captureRate, setCaptureRate] = useState(4.0);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.90);
+  const [captureRate, setCaptureRate] = useState(1.0);
 
   // ── Filtered Detections for Data table ──
   const filteredDetections = useMemo(() => {
@@ -84,12 +86,26 @@ export default function MissionDashboard() {
     });
   }, [detections, searchQuery, classFilter]);
 
+  // Stable refs for lat/lon so handleDetections doesn't recreate every telemetry tick
+  const latRef = React.useRef(lat);
+  const lonRef = React.useRef(lon);
+  React.useEffect(() => { latRef.current = lat; }, [lat]);
+  React.useEffect(() => { lonRef.current = lon; }, [lon]);
+
   // Handler for incoming detections
   const handleDetections = useCallback((raws: RawDetection[]) => {
     // Client-side confidence filter based on slider value
     const filtered = raws.filter(r => r.confidence_score >= confidenceThreshold);
-    addDetections(filtered, lat, lon);
-  }, [addDetections, confidenceThreshold, lat, lon]);
+    addDetections(filtered, latRef.current, lonRef.current);
+  }, [addDetections, confidenceThreshold]);
+
+  // Handler for live camera active state changes
+  const handleCameraActive = useCallback((active: boolean) => {
+    setLiveCamera(active);
+  }, []);
+
+  // Derived: is the camera considered "off" for the purposes of DetectionPanel?
+  const cameraOff = inputMode === "live" && !liveCamera;
 
   // Navigate & offset helper
   const navIndex = {
@@ -128,6 +144,8 @@ export default function MissionDashboard() {
         signalStrength={Math.round(sig)}
         battery={Math.round(bat)}
         modelStatus={modelStatus}
+        altitude={alt}
+        speed={speed}
       />
 
       {/* ── Main layout ── */}
@@ -163,22 +181,27 @@ export default function MissionDashboard() {
                   <div className={styles.modeStrip}>
                     <InputModeSelector
                       mode={inputMode}
-                      onModeChange={mode => { setInputMode(mode); clearDetections(); }}
+                      onModeChange={mode => {
+                        setInputMode(mode);
+                        clearDetections();
+                        // Reset camera state when leaving live mode
+                        if (mode !== "live") setLiveCamera(false);
+                      }}
                       modelReady={modelStatus.ready}
                     />
                     <div className={styles.ctrlGroup}>
                       <div className={styles.detChips}>
-                        <span className={styles.chip} style={{ color:"#10b981", borderColor:"rgba(16,185,129,0.25)", background:"rgba(16,185,129,0.05)" }}>
-                          {detections.filter(d => d.detected_class === "healthy").length} HEALTHY
-                        </span>
-                        <span className={styles.chip} style={{ color:"#ef4444", borderColor:"rgba(239,68,68,0.25)", background:"rgba(239,68,68,0.05)" }}>
-                          {detections.filter(d => d.detected_class !== "healthy").length} DISEASED
+                        <span className={styles.chip} style={{ color:"#00d4ff", borderColor:"rgba(0,212,255,0.25)", background:"rgba(0,212,255,0.05)" }}>
+                          {detections.length} CROPS CLASSIFIED
                         </span>
                         {totalScans > 0 && (
                           <span className={styles.chip} style={{ color:"#8b5cf6", borderColor:"rgba(139,92,246,0.25)", background:"rgba(139,92,246,0.05)" }}>
                             {totalScans} SCANS
                           </span>
                         )}
+                        <span className={styles.chip} style={{ color:"#f59e0b", borderColor:"rgba(245,158,11,0.25)", background:"rgba(245,158,11,0.05)" }} title="Parent model classifies crop species; child disease specialist models standby">
+                          CHILD MODELS: STANDBY
+                        </span>
                       </div>
                       <div className={styles.ctrlDivider}/>
                       <button
@@ -201,16 +224,18 @@ export default function MissionDashboard() {
                       mode={inputMode}
                       modelReady={modelStatus.ready}
                       onDetections={handleDetections}
+                      onCameraActive={handleCameraActive}
+                      scanInterval={captureRate}
                     />
                   </div>
                 </div>
                 {/* Detections column */}
                 <div className={styles.detectCol}>
-                  <DetectionPanel detections={detections} modelReady={modelStatus.ready} totalScans={totalScans}/>
+                  <DetectionPanel detections={detections} modelReady={modelStatus.ready} totalScans={totalScans} cameraOff={cameraOff}/>
                 </div>
                 {/* Telemetry and Complete panel */}
                 <div className={styles.rightCol}>
-                  <ZoneMap zones={summary.zones_breakdown}/>
+                  <ZoneMap zones={summary.zones_breakdown} detections={detections} />
                   <div className={styles.healthCard}>
                     <div className={styles.healthHeader}>
                       <span className={styles.healthLabel}>MISSION HEALTH SCORE</span>
@@ -267,11 +292,13 @@ export default function MissionDashboard() {
                       mode={inputMode}
                       modelReady={modelStatus.ready}
                       onDetections={handleDetections}
+                      onCameraActive={handleCameraActive}
+                      scanInterval={captureRate}
                     />
                   </div>
                 </div>
                 <div className={styles.detectCol}>
-                  <DetectionPanel detections={detections} modelReady={modelStatus.ready} totalScans={totalScans}/>
+                  <DetectionPanel detections={detections} modelReady={modelStatus.ready} totalScans={totalScans} cameraOff={cameraOff}/>
                 </div>
               </div>
             </div>
@@ -280,7 +307,7 @@ export default function MissionDashboard() {
             <div className={styles.slide}>
               <div className={styles.mapLayout}>
                 <div className={styles.mapContainer}>
-                  <ZoneMap zones={summary.zones_breakdown} />
+                  <ZoneMap zones={summary.zones_breakdown} detections={detections} />
                 </div>
                 <div className={styles.mapSidebar}>
                   <div className={styles.healthCard}>

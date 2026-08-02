@@ -129,6 +129,7 @@ export function generateMissionPDF(
 
   // ── Detection Log (last 50) ───────────────────────────────
   const recentDets = detections.slice(0, 50);
+  const isTruncated = detections.length > 50;
   if (recentDets.length > 0) {
     if ((doc as any).lastAutoTable.finalY + 30 > pageH - 20) doc.addPage();
     y = (doc as any).lastAutoTable.finalY + 10;
@@ -140,7 +141,10 @@ export function generateMissionPDF(
 
     doc.setFont("helvetica","bold"); doc.setFontSize(10);
     doc.setTextColor(0,212,255);
-    doc.text(`DETECTION LOG (last ${recentDets.length})`, 14, y); y += 4;
+    const logHeading = isTruncated
+      ? `DETECTION LOG  (showing 50 of ${detections.length} total)`
+      : `DETECTION LOG  (${recentDets.length} record${recentDets.length !== 1 ? "s" : ""})`;
+    doc.text(logHeading, 14, y); y += 4;
     doc.setDrawColor(0,212,255); doc.line(14, y, W-14, y); y += 3;
 
     autoTable(doc, {

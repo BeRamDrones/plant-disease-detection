@@ -1,6 +1,6 @@
 "use client";
 import { useState, useCallback } from "react";
-import { Detection } from "@/lib/types";
+import { Detection, getZoneFromCoords } from "@/lib/types";
 
 /**
  * Raw shape returned by /api/inference/infer/image and /api/inference/infer/video-frame
@@ -13,6 +13,7 @@ export interface RawDetection {
   y_center?: number;
   plant_class?: string;
   model_name?: string;
+  rank?: number;        // classification rank: 1 = top prediction
 }
 
 let _counter = 1;
@@ -23,16 +24,24 @@ function mapDetection(raw: RawDetection, droneLat: number, droneLon: number): De
   const latOffset = ((raw.x_center ?? 0.5) - 0.5) * 0.005;
   const lonOffset = ((raw.y_center ?? 0.5) - 0.5) * 0.005;
 
+  const lat = +(droneLat + latOffset).toFixed(5);
+  const lon = +(droneLon + lonOffset).toFixed(5);
+  const zone = getZoneFromCoords(lat, lon);
+
+  // Any classification result with confidence < 0.90 is classified as "notaleaf"
+  const detectedClass = raw.confidence_score < 0.90 ? "notaleaf" : raw.detected_class;
+
   return {
     id:               `det-${_counter++}`,
-    detected_class:   raw.detected_class,
+    detected_class:   detectedClass,
     confidence_score: raw.confidence_score,
-    lat:  +(droneLat + latOffset).toFixed(5),
-    lon:  +(droneLon + lonOffset).toFixed(5),
-    zone_id:    null,
-    zone_label: undefined,
+    lat,
+    lon,
+    zone_id:          zone.zone_id,
+    zone_label:       zone.zone_label,
     model_version: raw.model_name ?? "best.pt",
     detected_at: new Date().toISOString(),
+    rank:         raw.rank,
   };
 }
 
@@ -54,10 +63,11 @@ export function useDetections(): UseDetectionsReturn {
   const [totalScans,  setTotalScans]  = useState(0);
 
   const addDetections = useCallback((raws: RawDetection[], droneLat: number, droneLon: number) => {
+    // Always count this as a scan attempt — even if all results were confidence-filtered away
+    setTotalScans(n => n + 1);
     if (!raws || raws.length === 0) return;
     const mapped = raws.map(r => mapDetection(r, droneLat, droneLon));
     setDetections(prev => [...mapped, ...prev].slice(0, 200)); // keep last 200
-    setTotalScans(n => n + 1);
   }, []);
 
   const clearDetections = useCallback(() => {
