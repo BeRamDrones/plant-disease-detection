@@ -1,10 +1,10 @@
 "use client";
 import React from "react";
-import { AlertTriangle, CheckCircle, Activity } from "lucide-react";
+import { AlertTriangle, CheckCircle, Activity, Cpu } from "lucide-react";
 import { Detection, diseaseColor, severityLabel } from "@/lib/types";
 import styles from "./DetectionPanel.module.css";
 
-interface Props { detections: Detection[]; }
+interface Props { detections: Detection[]; modelReady: boolean; totalScans?: number; }
 
 function ConfBar({ val }: { val: number }) {
   const color = val >= 0.9 ? "#22c55e" : val >= 0.75 ? "#f59e0b" : "#ef4444";
@@ -62,7 +62,7 @@ function DetectionCard({ det, index }: { det: Detection; index: number }) {
   );
 }
 
-export default function DetectionPanel({ detections }: Props) {
+export default function DetectionPanel({ detections, modelReady, totalScans = 0 }: Props) {
   const diseaseCount = detections.filter(d => d.detected_class !== "healthy").length;
   const healthyCount = detections.filter(d => d.detected_class === "healthy").length;
 
@@ -86,16 +86,32 @@ export default function DetectionPanel({ detections }: Props) {
 
       {/* Live indicator */}
       <div className={styles.liveBar}>
-        <span className={styles.liveDot}/>
-        <span className={styles.liveText}>STREAMING — {detections.length} TOTAL</span>
+        <span className={`${styles.liveDot} ${!modelReady ? styles.liveDotWaiting : ""}`}/>
+        <span className={styles.liveText}>
+          {!modelReady
+            ? "AWAITING MODEL…"
+            : totalScans === 0
+              ? "MODEL READY — SUBMIT IMAGE / VIDEO / LIVE FRAME TO BEGIN"
+              : `${totalScans} SCAN(S) · ${detections.length} TOTAL DETECTIONS`
+          }
+        </span>
       </div>
 
       {/* Cards */}
       <div className={styles.list}>
-        {detections.length === 0 ? (
+        {!modelReady ? (
+          <div className={styles.empty}>
+            <Cpu size={28} color="rgba(245,158,11,0.3)"/>
+            <span style={{ color:"#f59e0b" }}>Loading parent model (best.pt)…</span>
+            <span style={{ fontSize:"10px", color:"var(--text-muted)" }}>Detection will begin once the model is ready</span>
+          </div>
+        ) : detections.length === 0 ? (
           <div className={styles.empty}>
             <Activity size={28} color="rgba(0,212,255,0.2)"/>
-            <span>Awaiting detections…</span>
+            <span>No detections yet</span>
+            <span style={{ fontSize:"10px", color:"var(--text-muted)", textAlign:"center", lineHeight:1.5 }}>
+              Upload an image, start video scan,{"\n"}or capture a live UAV frame
+            </span>
           </div>
         ) : (
           detections.map((d, i) => <DetectionCard key={d.id} det={d} index={i}/>)

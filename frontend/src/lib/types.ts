@@ -49,12 +49,38 @@ export const DISEASE_COLORS: Record<string, string> = {
   unknown:         "#94a3b8",
 };
 
+// Plant classes from parent model (best.pt)
+const CROP_CLASSES = new Set([
+  "apple", "banana", "bittergourd", "blueberry", "cashew", "cassava",
+  "castorbean", "coconut", "coffee", "coriander", "corn", "eggplant",
+  "fennel", "grape", "guava", "jackfruit", "mango", "moringa", "neem",
+  "notaleaf", "papaya", "peach", "pepperbell", "pomegranate", "potato",
+  "raspberry", "sesame", "soybean", "sunflower", "sweetpotato", "tobacco",
+  "tomato"
+]);
+
 export function diseaseColor(cls: string): string {
-  return DISEASE_COLORS[cls] ?? DISEASE_COLORS.unknown;
+  const norm = cls.toLowerCase().replace(/_/g, "");
+  if (norm === "healthy") return DISEASE_COLORS.healthy;
+  if (CROP_CLASSES.has(norm)) {
+    return norm === "notaleaf" ? "#ef4444" : "#00d4ff"; // Cyan for crops, Red for NotALeaf
+  }
+  
+  // Find key in DISEASE_COLORS by normalized name
+  const match = Object.keys(DISEASE_COLORS).find(
+    k => k.toLowerCase().replace(/_/g, "") === norm
+  );
+  return match ? DISEASE_COLORS[match] : DISEASE_COLORS.unknown;
 }
+
 export function severityLabel(cls: string): string {
-  if (cls === "healthy") return "HEALTHY";
-  if (["rust","blight","bacterial_wilt"].includes(cls)) return "CRITICAL";
-  if (["leaf_spot","anthracnose"].includes(cls)) return "HIGH";
+  const norm = cls.toLowerCase().replace(/_/g, "");
+  if (norm === "healthy") return "HEALTHY";
+  if (norm === "notaleaf") return "CRITICAL";
+  if (CROP_CLASSES.has(norm)) return "CROP ID"; // Parent model classifies crop
+  
+  if (["rust", "blight", "bacterialwilt"].includes(norm)) return "CRITICAL";
+  if (["leafspot", "anthracnose"].includes(norm)) return "HIGH";
   return "MODERATE";
 }
+

@@ -1,33 +1,40 @@
 "use client";
-import React, { useRef, useState, useEffect } from "react";
+import React, { useState, useCallback } from "react";
 import MissionHeader from "@/components/MissionHeader";
 import CameraFeed from "@/components/CameraFeed";
 import DetectionPanel from "@/components/DetectionPanel";
 import ZoneMap from "@/components/ZoneMap";
 import StatsBar from "@/components/StatsBar";
 import CompleteMissionButton from "@/components/CompleteMissionButton";
+import ModelGate from "@/components/ModelGate";
+import InputModeSelector, { InputMode } from "@/components/InputModeSelector";
 import { useMissionDetections } from "@/hooks/useMissionDetections";
+import { useModelStatus } from "@/hooks/useModelStatus";
+import { useDetections, RawDetection } from "@/hooks/useDetections";
 import { generateMissionSummary } from "@/lib/mockData";
-import { Pause, Play, RotateCcw } from "lucide-react";
+import {
+  RotateCcw,
+  LayoutDashboard, Radio, Map, BarChart2, Settings,
+} from "lucide-react";
 import styles from "./page.module.css";
 
-// Simulated drone telemetry values with subtle drift
+// ── Simulated drone telemetry with subtle drift ───────────────────────────────
 function useTelemetry() {
-  const [alt, setAlt]     = useState(85.4);
-  const [speed, setSpeed] = useState(12.3);
-  const [bat, setBat]     = useState(78);
-  const [sig, setSig]     = useState(92);
-  const [lat, setLat]     = useState(21.1455);
-  const [lon, setLon]     = useState(79.0882);
+  const [alt,   setAlt]   = React.useState(85.4);
+  const [speed, setSpeed] = React.useState(12.3);
+  const [bat,   setBat]   = React.useState(78);
+  const [sig,   setSig]   = React.useState(92);
+  const [lat,   setLat]   = React.useState(21.1455);
+  const [lon,   setLon]   = React.useState(79.0882);
 
-  useEffect(() => {
+  React.useEffect(() => {
     const t = setInterval(() => {
-      setAlt(v  => +(v + (Math.random()-0.5)*0.3).toFixed(1));
-      setSpeed(v=> +(v + (Math.random()-0.5)*0.4).toFixed(1));
-      setBat(v  => Math.max(5, +(v - 0.015).toFixed(1)));
-      setSig(v  => Math.min(100, Math.max(60, v + (Math.random()-0.5)*2)));
-      setLat(v  => +(v + (Math.random()-0.5)*0.0001).toFixed(5));
-      setLon(v  => +(v + (Math.random()-0.5)*0.0001).toFixed(5));
+      setAlt  (v => +(v + (Math.random()-0.5)*0.3).toFixed(1));
+      setSpeed(v => +(v + (Math.random()-0.5)*0.4).toFixed(1));
+      setBat  (v => Math.max(5, +(v - 0.015).toFixed(1)));
+      setSig  (v => Math.min(100, Math.max(60, v + (Math.random()-0.5)*2)));
+      setLat  (v => +(v + (Math.random()-0.5)*0.0001).toFixed(5));
+      setLon  (v => +(v + (Math.random()-0.5)*0.0001).toFixed(5));
     }, 1500);
     return () => clearInterval(t);
   }, []);
@@ -35,62 +42,129 @@ function useTelemetry() {
   return { alt, speed, bat, sig, lat, lon };
 }
 
+// ── Nav items ─────────────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  { id: "dashboard", icon: <LayoutDashboard size={18} />, label: "DASH"   },
+  { id: "stream",    icon: <Radio size={18} />,           label: "STREAM" },
+  { id: "map",       icon: <Map size={18} />,             label: "MAP"    },
+  { id: "analytics", icon: <BarChart2 size={18} />,       label: "DATA"   },
+  { id: "settings",  icon: <Settings size={18} />,        label: "CFG"    },
+] as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
 export default function MissionDashboard() {
-  const { mission, detections, elapsed, paused, setPaused, reset } = useMissionDetections();
+  const modelStatus = useModelStatus();
+  const { mission, elapsed } = useMissionDetections();
+  const { detections, addDetections, clearDetections, totalScans } = useDetections();
   const { alt, speed, bat, sig, lat, lon } = useTelemetry();
   const summary = generateMissionSummary(detections, mission);
 
+  const [activeNav, setActiveNav] = useState<string>("dashboard");
+  const [inputMode, setInputMode] = useState<InputMode>("live");
+
+  /**
+   * Called by CameraFeed whenever the backend returns real detections.
+   * Passes current drone GPS so detections are pinned to the right location.
+   */
+  const handleDetections = useCallback((raws: RawDetection[]) => {
+    addDetections(raws, lat, lon);
+  }, [addDetections, lat, lon]);
+
   return (
     <div className={styles.root}>
-      {/* ── Top nav ──────────────────────────────────── */}
+      {/* ── Model gate overlay ── */}
+      <ModelGate status={modelStatus} />
+
+      {/* ── Top nav ── */}
       <MissionHeader
         mission={mission}
         elapsed={elapsed}
         signalStrength={Math.round(sig)}
         battery={Math.round(bat)}
+        modelStatus={modelStatus}
       />
 
-      {/* ── Main content ─────────────────────────────── */}
+      {/* ── Main layout ── */}
       <div className={styles.body}>
 
-        {/* LEFT: Camera + controls */}
-        <div className={styles.leftCol}>
-          <div className={styles.cameraWrap}>
-            <CameraFeed altitude={alt} speed={speed} lat={lat} lon={lon}/>
-          </div>
-
-          {/* Control strip under camera */}
-          <div className={styles.ctrlStrip}>
+        {/* LEFT: vertical nav sidebar */}
+        <nav className={styles.sidebar}>
+          {NAV_ITEMS.map(item => (
             <button
-              className={`${styles.ctrlBtn} ${paused ? styles.ctrlActive : ""}`}
-              onClick={() => setPaused(p => !p)}
-              title={paused ? "Resume stream" : "Pause stream"}
+              key={item.id}
+              className={`${styles.navBtn} ${activeNav === item.id ? styles.navActive : ""}`}
+              onClick={() => setActiveNav(item.id)}
+              title={item.label}
             >
-              {paused ? <Play size={13}/> : <Pause size={13}/>}
-              <span>{paused ? "RESUME" : "PAUSE"}</span>
+              {item.icon}
+              <span className={styles.navLabel}>{item.label}</span>
             </button>
-            <button className={styles.ctrlBtn} onClick={reset} title="Clear detections">
-              <RotateCcw size={13}/>
-              <span>CLEAR</span>
-            </button>
-            <div className={styles.ctrlDivider}/>
-            <div className={styles.detSummaryChips}>
-              <span className={styles.chip} style={{ color:"#22c55e",borderColor:"rgba(34,197,94,0.3)",background:"rgba(34,197,94,0.08)" }}>
-                {detections.filter(d=>d.detected_class==="healthy").length} HEALTHY
-              </span>
-              <span className={styles.chip} style={{ color:"#ef4444",borderColor:"rgba(239,68,68,0.3)",background:"rgba(239,68,68,0.08)" }}>
-                {detections.filter(d=>d.detected_class!=="healthy").length} DISEASED
-              </span>
+          ))}
+        </nav>
+
+        {/* CENTER: Camera feed + controls */}
+        <div className={styles.mainCol}>
+          {/* Mode selector strip */}
+          <div className={styles.modeStrip}>
+            <InputModeSelector
+              mode={inputMode}
+              onModeChange={mode => { setInputMode(mode); clearDetections(); }}
+              modelReady={modelStatus.ready}
+            />
+
+            {/* Stats + clear */}
+            <div className={styles.ctrlGroup}>
+              {/* Running tally chips */}
+              <div className={styles.detChips}>
+                <span className={styles.chip} style={{ color:"#22c55e", borderColor:"rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.08)" }}>
+                  {detections.filter(d => d.detected_class === "healthy").length} HEALTHY
+                </span>
+                <span className={styles.chip} style={{ color:"#ef4444", borderColor:"rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.08)" }}>
+                  {detections.filter(d => d.detected_class !== "healthy").length} DISEASED
+                </span>
+                {totalScans > 0 && (
+                  <span className={styles.chip} style={{ color:"#a855f7", borderColor:"rgba(168,85,247,0.3)", background:"rgba(168,85,247,0.08)" }}>
+                    {totalScans} SCANS
+                  </span>
+                )}
+              </div>
+              <div className={styles.ctrlDivider}/>
+              <button
+                className={styles.ctrlBtn}
+                onClick={clearDetections}
+                title="Clear all detections"
+                disabled={!modelStatus.ready || detections.length === 0}
+              >
+                <RotateCcw size={11}/>
+                <span>CLEAR</span>
+              </button>
             </div>
           </div>
+
+          {/* Camera feed — onDetections wired to real inference results only */}
+          <div className={styles.feedWrap}>
+            <CameraFeed
+              altitude={alt}
+              speed={speed}
+              lat={lat}
+              lon={lon}
+              mode={inputMode}
+              modelReady={modelStatus.ready}
+              onDetections={handleDetections}
+            />
+          </div>
         </div>
 
-        {/* CENTER: Detection feed */}
-        <div className={styles.centerCol}>
-          <DetectionPanel detections={detections}/>
+        {/* RIGHT panel A: Detection feed — only real model results */}
+        <div className={styles.detectCol}>
+          <DetectionPanel
+            detections={detections}
+            modelReady={modelStatus.ready}
+            totalScans={totalScans}
+          />
         </div>
 
-        {/* RIGHT: Zone map + complete button */}
+        {/* RIGHT panel B: Zone map + health + zone list + CTA */}
         <div className={styles.rightCol}>
           <ZoneMap zones={summary.zones_breakdown}/>
 
@@ -105,18 +179,15 @@ export default function MissionDashboard() {
               </span>
             </div>
             <div className={styles.healthBar}>
-              <div
-                className={styles.healthFill}
-                style={{
-                  width: `${summary.health_score}%`,
-                  background: summary.health_score >= 70 ? "#22c55e" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444",
-                }}
-              />
+              <div className={styles.healthFill} style={{
+                width: `${summary.health_score}%`,
+                background: summary.health_score >= 70 ? "#22c55e" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444",
+              }}/>
               <div className={styles.healthShimmer}/>
             </div>
           </div>
 
-          {/* Zone breakdown mini list */}
+          {/* Zone breakdown list */}
           <div className={styles.zoneList}>
             <div className={styles.zoneListHeader}>ZONE STATUS</div>
             <div className={styles.zoneItems}>
@@ -133,19 +204,24 @@ export default function MissionDashboard() {
                     <span className={styles.zoneItemCount}>{z.detection_count}</span>
                   </div>
                 ))}
-              {summary.zones_breakdown.filter(z=>z.detection_count>0).length===0 && (
-                <div className={styles.noZones}>No active zones yet</div>
+              {summary.zones_breakdown.filter(z => z.detection_count > 0).length === 0 && (
+                <div className={styles.noZones}>No detections yet — submit an image or start live scan</div>
               )}
             </div>
           </div>
 
-          {/* Complete Mission CTA */}
           <CompleteMissionButton mission={mission} detections={detections} elapsed={elapsed}/>
         </div>
       </div>
 
-      {/* ── Bottom stats bar ─────────────────────────── */}
-      <StatsBar detections={detections} zones={summary.zones_breakdown} healthScore={summary.health_score}/>
+      {/* ── Bottom stats bar ── */}
+      <StatsBar
+        detections={detections}
+        zones={summary.zones_breakdown}
+        healthScore={summary.health_score}
+        inputMode={inputMode}
+        modelStatus={modelStatus}
+      />
     </div>
   );
 }

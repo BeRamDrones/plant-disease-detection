@@ -1,0 +1,93 @@
+.wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  position: relative;
+}
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: var(--font-hud);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  position: relative;
+  white-space: nowrap;
+}
+
+.tab:hover:not(.disabled):not(.active) {
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.06);
+}
+
+.tab.active {
+  background: rgba(0,212,255,0.1);
+  border-color: rgba(0,212,255,0.3);
+  color: #00d4ff;
+  box-shadow: 0 0 12px rgba(0,212,255,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+}
+
+.tab.disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.tabIcon {
+  display: flex;
+  align-items: center;
+}
+
+.tabLabel {
+  letter-spacing: 0.12em;
+}
+
+/* Pulse dot on active tab */
+.activeDot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #00d4ff;
+  animation: pulseDot 2s ease-in-out infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.6); }
+}
+
+/* Lock badge */
+.lockBadge {
+  font-family: var(--font-hud);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #f59e0b;
+  padding: 3px 10px;
+  background: rgba(245,158,11,0.08);
+  border: 1px solid rgba(245,158,11,0.2);
+  border-radius: 20px;
+  margin-left: 6px;
+  animation: lockPulse 2s ease-in-out infinite;
+}
+
+@keyframes lockPulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}

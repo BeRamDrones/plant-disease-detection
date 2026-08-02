@@ -1,12 +1,33 @@
 "use client";
 import React from "react";
-import { Shield, AlertTriangle, Activity, Layers } from "lucide-react";
+import { Shield, AlertTriangle, Activity, Layers, Cpu, Camera, Film, Radio } from "lucide-react";
 import { Detection, ZoneSummary } from "@/lib/types";
+import { InputMode } from "./InputModeSelector";
 import styles from "./StatsBar.module.css";
 
-interface Props { detections: Detection[]; zones: ZoneSummary[]; healthScore: number; }
+import { ModelStatus } from "@/hooks/useModelStatus";
 
-export default function StatsBar({ detections, zones, healthScore }: Props) {
+interface Props {
+  detections: Detection[];
+  zones: ZoneSummary[];
+  healthScore: number;
+  inputMode: InputMode;
+  modelStatus: ModelStatus;
+}
+
+const MODE_ICONS: Record<InputMode, React.ReactNode> = {
+  image: <Camera size={14} />,
+  video: <Film size={14} />,
+  live:  <Radio size={14} />,
+};
+
+const MODE_LABELS: Record<InputMode, string> = {
+  image: "IMAGE",
+  video: "VIDEO",
+  live:  "LIVE UAV",
+};
+
+export default function StatsBar({ detections, zones, healthScore, inputMode, modelStatus }: Props) {
   const diseased   = detections.filter(d => d.detected_class !== "healthy");
   const classMap   = Object.fromEntries(
     Object.entries(
@@ -19,32 +40,15 @@ export default function StatsBar({ detections, zones, healthScore }: Props) {
   const dominant   = Object.keys(classMap)[0] ?? "—";
   const zonesActive = zones.filter(z => z.detection_count > 0).length;
   const hsColor    = healthScore >= 70 ? "#22c55e" : healthScore >= 40 ? "#f59e0b" : "#ef4444";
+  const modelColor = modelStatus.ready
+    ? (modelStatus.mock_mode ? "#f59e0b" : "#22c55e")
+    : "#f59e0b";
 
   const stats = [
-    {
-      icon: <Activity size={16} color="#00d4ff"/>,
-      label: "TOTAL DETECTIONS",
-      value: detections.length.toString(),
-      color: "#00d4ff",
-    },
-    {
-      icon: <AlertTriangle size={16} color="#ef4444"/>,
-      label: "DISEASED ALERTS",
-      value: diseased.length.toString(),
-      color: "#ef4444",
-    },
-    {
-      icon: <Layers size={16} color="#a855f7"/>,
-      label: "ZONES ACTIVE",
-      value: `${zonesActive} / ${zones.length}`,
-      color: "#a855f7",
-    },
-    {
-      icon: <Shield size={16} color={hsColor}/>,
-      label: "HEALTH SCORE",
-      value: `${healthScore.toFixed(1)}%`,
-      color: hsColor,
-    },
+    { icon: <Activity size={16} color="#00d4ff"/>,       label: "TOTAL DETECTIONS", value: detections.length.toString(), color: "#00d4ff"  },
+    { icon: <AlertTriangle size={16} color="#ef4444"/>,  label: "DISEASED ALERTS",  value: diseased.length.toString(),   color: "#ef4444"  },
+    { icon: <Layers size={16} color="#a855f7"/>,         label: "ZONES ACTIVE",     value: `${zonesActive} / ${zones.length}`, color: "#a855f7" },
+    { icon: <Shield size={16} color={hsColor}/>,         label: "HEALTH SCORE",     value: `${healthScore.toFixed(1)}%`, color: hsColor    },
   ];
 
   return (
@@ -58,17 +62,46 @@ export default function StatsBar({ detections, zones, healthScore }: Props) {
               <span className={styles.statValue} style={{ color: s.color }}>{s.value}</span>
             </div>
           </div>
-          {i < stats.length - 1 && <div className={styles.divider}/>}
+          <div className={styles.divider}/>
         </React.Fragment>
       ))}
 
       {/* Dominant disease */}
-      <div className={styles.divider}/>
       <div className={styles.statBlock}>
         <div className={styles.statContent}>
           <span className={styles.statLabel}>DOMINANT DISEASE</span>
           <span className={styles.statValue} style={{ color:"#f59e0b", fontSize:"11px" }}>
             {dominant.replace(/_/g," ").toUpperCase()}
+          </span>
+        </div>
+      </div>
+
+      <div className={styles.divider}/>
+
+      {/* Input mode indicator */}
+      <div className={styles.statBlock} style={{ flex: "none", paddingRight: 0 }}>
+        <span style={{ color: "#00d4ff" }}>{MODE_ICONS[inputMode]}</span>
+        <div className={styles.statContent}>
+          <span className={styles.statLabel}>INPUT MODE</span>
+          <span className={styles.statValue} style={{ color: "#00d4ff", fontSize: "11px" }}>
+            {MODE_LABELS[inputMode]}
+          </span>
+        </div>
+      </div>
+
+      <div className={styles.divider}/>
+
+      {/* Model status indicator */}
+      <div className={styles.statBlock} style={{ flex: "none" }}>
+        <Cpu size={16} color={modelColor}/>
+        <div className={styles.statContent}>
+          <span className={styles.statLabel}>
+            PARENT MODEL ({modelStatus.device?.toUpperCase() || "CPU"})
+          </span>
+          <span className={styles.statValue} style={{ color: modelColor, fontSize: "11px" }}>
+            {modelStatus.ready
+              ? (modelStatus.mock_mode ? "MOCK MODE" : `READY (${modelStatus.model_task?.toUpperCase()})`)
+              : "LOADING…"}
           </span>
         </div>
       </div>

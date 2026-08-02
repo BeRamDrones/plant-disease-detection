@@ -1,99 +1,322 @@
 import os
 import logging
-from typing import Dict, Any, List
+import datetime
+from typing import Dict, Any, List, Optional
 
 logger = logging.getLogger("app.services.inference")
 
-# Define the path where model weights should be placed
-WEIGHTS_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "weights"))
+# ---------------------------------------------------------------------------
+# Path resolution: check root of backend/ first, then weights/ subfolder
+# ---------------------------------------------------------------------------
+_BASE_DIR   = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+WEIGHTS_DIR = os.path.join(_BASE_DIR, "weights")
 
+
+def _resolve_model_path(filename: str) -> Optional[str]:
+    """
+    Searches for a .pt file in priority order:
+      1. backend/ root  (e.g. backend/best.pt)
+      2. backend/weights/ subfolder
+    Returns the first path that exists, or None.
+    """
+    for path in [os.path.join(_BASE_DIR, filename), os.path.join(WEIGHTS_DIR, filename)]:
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def _best_device() -> str:
+    """
+    Returns the best available torch device string:
+      'cuda'  → NVIDIA GPU present
+      'mps'   → Apple Silicon GPU
+      'cpu'   → fallback
+    """
+    try:
+        import torch
+        if torch.cuda.is_available():
+            dev = f"cuda:{torch.cuda.current_device()}"
+            name = torch.cuda.get_device_name(0)
+            logger.info(f"[Device] GPU detected → {dev} ({name})")
+            return dev
+        if getattr(torch.backends, "mps", None) and torch.backends.mps.is_available():
+            logger.info("[Device] Apple MPS detected → mps")
+            return "mps"
+    except Exception as e:
+        logger.warning(f"[Device] Device detection error: {e} — using CPU")
+    logger.info("[Device] No GPU found — using CPU")
+    return "cpu"
+
+
+# ---------------------------------------------------------------------------
+# ModelRegistry — singleton that tracks load state across the app lifetime
+# ---------------------------------------------------------------------------
+class ModelRegistry:
+    """
+    Singleton registry.  Call `get()` to obtain the shared instance.
+    Loads the parent model (best.pt) onto the best available device.
+    """
+    _instance: Optional["ModelRegistry"] = None
+
+    def __init__(self):
+        self.is_ready: bool        = False
+        self.model_name: str       = "best.pt"
+        self.loaded_at: Optional[str] = None
+        self.device: str           = "cpu"
+        self.model_task: str       = "unknown"  # 'classify' | 'detect' | 'segment'
+        self._model                = None
+        self._torch_available: bool = False
+        self._mock_mode: bool      = False
+
+        try:
+            import ultralytics  # noqa: F401
+            import torch        # noqa: F401
+            self._torch_available = True
+        except ImportError as _e:
+            logger.warning(
+                f"Required package not found ({_e}). Inference will run in Mock Mode. "
+                "Run: pip install ultralytics torch torchvision"
+            )
+
+    @classmethod
+    def get(cls) -> "ModelRegistry":
+        if cls._instance is None:
+            cls._instance = cls()
+        return cls._instance
+
+    # ------------------------------------------------------------------
+    def load(self, parent_model_filename: str = "best.pt") -> bool:
+        """
+        Loads the parent YOLO model onto the best available device (GPU first).
+        Must be called once at application startup via the lifespan event.
+        """
+        self.model_name = parent_model_filename
+
+        if not self._torch_available:
+            logger.info(
+                "[ModelRegistry] PyTorch/ultralytics not available — enabling Mock Mode."
+            )
+            self._mock_mode = True
+            self.is_ready   = True
+            self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
+            return True
+
+        model_path = _resolve_model_path(parent_model_filename)
+        if model_path is None:
+            logger.warning(
+                f"[ModelRegistry] '{parent_model_filename}' not found in "
+                f"'{_BASE_DIR}' or '{WEIGHTS_DIR}'. Falling back to Mock Mode."
+            )
+            self._mock_mode = True
+            self.is_ready   = True
+            self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
+            return True
+
+        # ── Detect best device ──────────────────────────────────────────
+        self.device = _best_device()
+
+        try:
+            from ultralytics import YOLO
+            logger.info(
+                f"[ModelRegistry] Loading YOLO model: {model_path} → device={self.device}"
+            )
+            self._model     = YOLO(model_path)
+            self.model_task = getattr(self._model, "task", "unknown")
+
+            # Move model weights to the chosen device
+            # YOLO's .to() propagates to the underlying torch module
+            self._model.to(self.device)
+
+            self.is_ready  = True
+            self.loaded_at = datetime.datetime.utcnow().isoformat() + "Z"
+            logger.info(
+                f"[ModelRegistry] ✓ Model ready — "
+                f"file={parent_model_filename}, task={self.model_task}, device={self.device}"
+            )
+            return True
+
+        except Exception as exc:
+            logger.error(
+                f"[ModelRegistry] Failed to load '{model_path}': {exc}",
+                exc_info=True,
+            )
+            self._mock_mode = True
+            self.is_ready   = True
+            self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
+            return False
+
+    # ------------------------------------------------------------------
+    def status(self) -> Dict[str, Any]:
+        return {
+            "ready":           self.is_ready,
+            "mock_mode":       self._mock_mode,
+            "model_name":      self.model_name,
+            "model_task":      self.model_task,
+            "device":          self.device,
+            "loaded_at":       self.loaded_at,
+            "torch_available": self._torch_available,
+        }
+
+
+# ---------------------------------------------------------------------------
+# DiseaseDetectionPipeline
+# ---------------------------------------------------------------------------
 class DiseaseDetectionPipeline:
     """
-    A pipeline to load and run PyTorch models (.pt) for plant disease detection.
-    Phase 1: Parent Model (e.g. YOLO/Localization) -> Locates the plants/leaves and crops.
-    Phase 2: Child Model (e.g. ResNet/Cls Model) -> Classifies specific plant diseases on crops.
+    Phase 1 — Parent model (best.pt): crop / disease classification.
+    Phase 2 — Child models (per-crop specialists): disease detection (WIP).
+
+    Supports both YOLO task types automatically:
+      • task=classify → result.probs   (top-k class probabilities)
+      • task=detect   → result.boxes   (bounding boxes + class + conf)
     """
-    def __init__(self, parent_model_filename: str = "parent_disease_model.pt"):
-        self.model_path = os.path.join(WEIGHTS_DIR, parent_model_filename)
-        self.model = None
-        self.is_loaded = False
-        
-        # Check if PyTorch is installed in the current virtual environment
-        try:
-            import torch
-            self.torch_available = True
-        except ImportError:
-            self.torch_available = False
-            logger.warning(
-                "PyTorch ('torch') is not installed. Inference will run in Mock Mode. "
-                "To run actual predictions, please run: pip install torch torchvision"
-            )
 
-    def load_model(self) -> bool:
-        """
-        Loads the PyTorch model weights (.pt) dynamically.
-        """
-        if not self.torch_available:
-            logger.info("Inference running in mock mode. Dynamic loading skipped.")
-            self.is_loaded = True
-            return True
+    def __init__(self):
+        self._registry = ModelRegistry.get()
 
-        if not os.path.exists(self.model_path):
-            logger.warning(
-                f"Model weights file not found at '{self.model_path}'. "
-                f"Inference will fall back to mock data. Please drop your .pt file in the weights/ folder."
-            )
-            return False
+    @property
+    def is_loaded(self) -> bool:
+        return self._registry.is_ready
 
-        try:
-            import torch
-            # Load model onto CPU by default (safe configuration for all environments)
-            self.model = torch.load(self.model_path, map_location="cpu")
-            self.model.eval()  # Set model to evaluation mode
-            self.is_loaded = True
-            logger.info(f"Successfully loaded PyTorch model from: {self.model_path}")
-            return True
-        except Exception as e:
-            logger.error(f"Failed to load PyTorch model from {self.model_path}: {str(e)}", exc_info=True)
-            return False
-
+    # ------------------------------------------------------------------
     def run_inference(self, image_path: str) -> List[Dict[str, Any]]:
         """
-        Performs inference on a target image frame.
-        If PyTorch is installed and model loaded, runs actual inference.
-        Otherwise, returns sample mock disease detection structures.
+        Gate: returns [] if model is not ready, preventing ghost detections.
         """
-        if not self.is_loaded:
-            self.load_model()
+        if not self._registry.is_ready:
+            logger.warning("[Pipeline] Model not ready — returning empty result.")
+            return []
 
-        if not self.torch_available or self.model is None:
-            # Mock return simulating disease localization outputs
-            logger.info(f"[Mock Inference] Analyzing image: {image_path}")
-            return [
-                {
-                    "detected_class": "powdery_mildew",
-                    "confidence_score": 0.88,
-                    "x_center": 0.45,
-                    "y_center": 0.62,
-                },
-                {
-                    "detected_class": "healthy",
-                    "confidence_score": 0.94,
-                    "x_center": 0.21,
-                    "y_center": 0.15,
-                }
-            ]
+        if self._registry._mock_mode or self._registry._model is None:
+            return self._mock_results(image_path)
 
-        # PyTorch model forward pass logic
-        logger.info(f"[Real Inference] Processing image frame: {image_path}")
+        return self._real_inference(image_path)
+
+    # ------------------------------------------------------------------
+    def _mock_results(self, image_path: str) -> List[Dict[str, Any]]:
+        """Simulated detections for demo / mock-mode environments."""
+        import random
+        logger.info(f"[Mock] Simulating inference for: {image_path}")
+        diseases = [
+            "healthy", "powdery_mildew", "rust", "blight",
+            "leaf_spot", "mosaic_virus", "anthracnose", "downy_mildew",
+        ]
+        return [
+            {
+                "detected_class":   random.choice(diseases),
+                "confidence_score": round(0.70 + random.random() * 0.28, 4),
+                "x_center":        round(random.random(), 4),
+                "y_center":        round(random.random(), 4),
+                "plant_class":     "mock",
+                "model_name":      "best.pt (mock)",
+            }
+        ]
+
+    # ------------------------------------------------------------------
+    def _real_inference(self, image_path: str) -> List[Dict[str, Any]]:
+        """
+        Runs the YOLO model on the given image path.
+
+        Handles two YOLO task types:
+          • classify → returns top-5 class probabilities as individual detections
+          • detect   → returns bounding-box detections above a confidence threshold
+        """
+        logger.info(
+            f"[Real Inference] image={image_path} | "
+            f"task={self._registry.model_task} | device={self._registry.device}"
+        )
         try:
-            import torch
-            # 1. Load image (e.g., PIL or OpenCV)
-            # 2. Preprocess to Tensor matching model input shapes
-            # 3. run: with torch.no_grad(): outputs = self.model(tensors)
-            # 4. Postprocess bounding box, label mapping, and confidence scores
-            # Placeholder implementation:
+            # Run inference on the selected device
+            results = self._registry._model(
+                image_path,
+                device=self._registry.device,
+                verbose=False,
+            )
+
+            detections: List[Dict[str, Any]] = []
+
+            for result in results:
+                task = self._registry.model_task
+
+                # ── CLASSIFY task ────────────────────────────────────────────
+                if task == "classify" or (
+                    hasattr(result, "probs") and result.probs is not None
+                ):
+                    probs = result.probs
+                    names = result.names          # int → class name
+
+                    if probs is None:
+                        continue
+
+                    # top-5 results give a fuller picture of the crop/disease state
+                    top5_indices = probs.top5        # list of 5 class indices
+                    top5_confs   = probs.top5conf    # tensor of 5 confidences
+
+                    for rank, (cls_idx, conf_t) in enumerate(
+                        zip(top5_indices, top5_confs)
+                    ):
+                        cls_name = names.get(int(cls_idx), f"class_{cls_idx}")
+                        conf     = float(conf_t)
+
+                        # Only include results with meaningful confidence
+                        if conf < 0.01:
+                            continue
+
+                        detections.append({
+                            "detected_class":   cls_name,
+                            "confidence_score": round(conf, 4),
+                            "x_center":        0.5,          # classification has no bbox
+                            "y_center":        0.5,
+                            "rank":            rank + 1,     # 1 = top prediction
+                            "plant_class":     names.get(int(top5_indices[0]), "unknown"),
+                            "model_name":      "best.pt",
+                        })
+
+                    logger.info(
+                        f"[Real Inference] classify → top prediction: "
+                        f"'{detections[0]['detected_class']}' "
+                        f"({detections[0]['confidence_score']*100:.1f}%)"
+                        if detections else "[Real Inference] classify → no probs returned"
+                    )
+
+                # ── DETECT task ──────────────────────────────────────────────
+                else:
+                    boxes = result.boxes
+                    names = result.names
+
+                    if boxes is None or len(boxes) == 0:
+                        continue
+
+                    for box in boxes:
+                        cls_idx  = int(box.cls[0])
+                        cls_name = names.get(cls_idx, f"class_{cls_idx}")
+                        conf     = float(box.conf[0])
+
+                        if conf < 0.25:   # filter low-confidence noise
+                            continue
+
+                        xywhn = box.xywhn[0].tolist()
+                        detections.append({
+                            "detected_class":   cls_name,
+                            "confidence_score": round(conf, 4),
+                            "x_center":        round(xywhn[0], 4),
+                            "y_center":        round(xywhn[1], 4),
+                            "plant_class":     cls_name,
+                            "model_name":      "best.pt",
+                        })
+
+                    logger.info(
+                        f"[Real Inference] detect → {len(detections)} box(es) found"
+                    )
+
+            return detections
+
+        except Exception as exc:
+            logger.error(f"[Pipeline] Inference error: {exc}", exc_info=True)
             return []
-        except Exception as e:
-            logger.error(f"Error during PyTorch model execution: {str(e)}", exc_info=True)
-            return []
+
+
+# ---------------------------------------------------------------------------
+# Module-level convenience: shared pipeline instance
+# ---------------------------------------------------------------------------
+pipeline = DiseaseDetectionPipeline()

@@ -36,6 +36,9 @@
   background:#ef4444;
   animation:pulse-dot 1s ease-in-out infinite;
 }
+.liveDotWaiting {
+  background:#f59e0b !important;
+}
 .liveText {
   font-family:var(--font-hud); font-size:8px; font-weight:600; letter-spacing:0.12em;
   color:var(--text-muted);

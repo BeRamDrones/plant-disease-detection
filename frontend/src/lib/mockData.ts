@@ -31,8 +31,10 @@ export function generateMissionSummary(
   detections: Detection[],
   mission: MissionData
 ): MissionSummary {
+  // Defensive guard — detections may be undefined during SSR/HMR transitions
+  const safeDetections = Array.isArray(detections) ? detections : [];
   const zoneMap: Record<string, Detection[]> = {};
-  detections.forEach(d => {
+  safeDetections.forEach(d => {
     const k = d.zone_label ?? "unknown";
     if (!zoneMap[k]) zoneMap[k] = [];
     zoneMap[k].push(d);
