@@ -296,18 +296,36 @@ function LiveUAVMode({
   const wrapRef     = useRef<HTMLDivElement>(null);
   const captureRef  = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [camStatus,   setCamStatus]   = useState<"requesting"|"active"|"unavailable">("requesting");
-  const [rtspUrl,     setRtspUrl]     = useState("");
-  const [showRtsp,    setShowRtsp]    = useState(false);
-  const [autoCapture, setAutoCapture] = useState(false);
-  const [lastResult,  setLastResult]  = useState<string | null>(null);
+  const [camStatus,        setCamStatus]        = useState<"requesting"|"active"|"unavailable">("requesting");
+  const [useSimulatedFeed, setUseSimulatedFeed] = useState(false);
+  const [rtspUrl,          setRtspUrl]          = useState("");
+  const [showRtsp,         setShowRtsp]         = useState(false);
+  const [autoCapture,      setAutoCapture]      = useState(false);
+  const [lastResult,       setLastResult]       = useState<string | null>(null);
 
-  // Start webcam
+  // Start webcam or fallback
   useEffect(() => {
     let stream: MediaStream | null = null;
-    navigator.mediaDevices?.getUserMedia({ video: true })
-      .then(s => { stream = s; if (videoRef.current) videoRef.current.srcObject = s; setCamStatus("active"); })
-      .catch(() => setCamStatus("unavailable"));
+    
+    if (typeof navigator !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.mediaDevices.getUserMedia({ video: true })
+        .then(s => {
+          stream = s;
+          if (videoRef.current) videoRef.current.srcObject = s;
+          setCamStatus("active");
+          setUseSimulatedFeed(false);
+        })
+        .catch(() => {
+          // Camera permission blocked or camera not found → fallback to simulation
+          setUseSimulatedFeed(true);
+          setCamStatus("active");
+        });
+    } else {
+      // Non-secure origin / API not available → fallback to simulation
+      setUseSimulatedFeed(true);
+      setCamStatus("active");
+    }
+
     return () => {
       stream?.getTracks().forEach(t => t.stop());
       if (captureRef.current) clearInterval(captureRef.current);
@@ -336,15 +354,35 @@ function LiveUAVMode({
     }, "image/jpeg", 0.85);
   }, [modelReady, onDetections]);
 
-  // Toggle automatic frame capture
-  const toggleAutoCapture = () => {
-    if (autoCapture) {
-      setAutoCapture(false);
-      if (captureRef.current) { clearInterval(captureRef.current); captureRef.current = null; }
-    } else {
-      setAutoCapture(true);
+  // Reactive scan manager
+  useEffect(() => {
+    if (autoCapture && camStatus === "active" && modelReady) {
+      captureFrame();
       captureRef.current = setInterval(captureFrame, scanInterval * 1000);
+    } else {
+      if (captureRef.current) {
+        clearInterval(captureRef.current);
+        captureRef.current = null;
+      }
     }
+
+    return () => {
+      if (captureRef.current) {
+        clearInterval(captureRef.current);
+        captureRef.current = null;
+      }
+    };
+  }, [autoCapture, camStatus, modelReady, scanInterval, captureFrame]);
+
+  // Automatically start live scan when stream gets connected
+  useEffect(() => {
+    if (camStatus === "active" && modelReady) {
+      setAutoCapture(true);
+    }
+  }, [camStatus, modelReady]);
+
+  const toggleAutoCapture = () => {
+    setAutoCapture(v => !v);
   };
 
   const toggleFullscreen = () => {
@@ -358,7 +396,16 @@ function LiveUAVMode({
 
       {/* Camera source */}
       {camStatus === "active" ? (
-        <video ref={videoRef} autoPlay playsInline muted className={styles.video} />
+        <video
+          ref={videoRef}
+          src={useSimulatedFeed ? "https://assets.mixkit.co/videos/preview/mixkit-drone-shot-of-a-green-crop-field-42426-large.mp4" : undefined}
+          autoPlay
+          playsInline
+          muted
+          loop
+          crossOrigin="anonymous"
+          className={styles.video}
+        />
       ) : (
         <div className={styles.placeholder}>
           <div className={styles.noise} />
@@ -428,8 +475,8 @@ function LiveUAVMode({
         </div>
         <div className={styles.hudChip}>
           <span className={styles.hudLabel}>CAM</span>
-          <span className={styles.hudValue} style={{ color: camStatus === "active" ? "#22c55e" : "#ef4444" }}>
-            {camStatus === "active" ? "LIVE" : "OFFLINE"}
+          <span className={styles.hudValue} style={{ color: camStatus === "active" ? "#10b981" : "#ef4444" }}>
+            {camStatus === "active" ? (useSimulatedFeed ? "SIMULATION" : "LIVE") : "OFFLINE"}
           </span>
         </div>
         <div className={styles.hudChip}>
