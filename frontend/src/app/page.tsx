@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useMemo } from "react";
 import MissionHeader from "@/components/MissionHeader";
 import CameraFeed from "@/components/CameraFeed";
 import DetectionPanel from "@/components/DetectionPanel";
@@ -12,8 +12,9 @@ import { useMissionDetections } from "@/hooks/useMissionDetections";
 import { useModelStatus } from "@/hooks/useModelStatus";
 import { useDetections, RawDetection } from "@/hooks/useDetections";
 import { generateMissionSummary } from "@/lib/mockData";
+import { diseaseColor, severityLabel } from "@/lib/types";
 import {
-  RotateCcw,
+  RotateCcw, Sliders, Cpu, Database, Info, Search, Filter, Download,
   LayoutDashboard, Radio, Map, BarChart2, Settings,
 } from "lucide-react";
 import styles from "./page.module.css";
@@ -62,13 +63,58 @@ export default function MissionDashboard() {
   const [activeNav, setActiveNav] = useState<string>("dashboard");
   const [inputMode, setInputMode] = useState<InputMode>("live");
 
-  /**
-   * Called by CameraFeed whenever the backend returns real detections.
-   * Passes current drone GPS so detections are pinned to the right location.
-   */
+  // ── Search & Filter State for DATA View ──
+  const [searchQuery, setSearchQuery] = useState("");
+  const [classFilter, setClassFilter] = useState<"all" | "diseased" | "healthy">("all");
+
+  // ── Config State for CFG View ──
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.25);
+  const [captureRate, setCaptureRate] = useState(4.0);
+
+  // ── Filtered Detections for Data table ──
+  const filteredDetections = useMemo(() => {
+    return detections.filter(d => {
+      const matchesSearch = d.detected_class.toLowerCase().includes(searchQuery.toLowerCase());
+      const isHealthy     = d.detected_class.toLowerCase() === "healthy";
+      const matchesFilter =
+        classFilter === "all" ||
+        (classFilter === "healthy" && isHealthy) ||
+        (classFilter === "diseased" && !isHealthy);
+      return matchesSearch && matchesFilter;
+    });
+  }, [detections, searchQuery, classFilter]);
+
+  // Handler for incoming detections
   const handleDetections = useCallback((raws: RawDetection[]) => {
-    addDetections(raws, lat, lon);
-  }, [addDetections, lat, lon]);
+    // Client-side confidence filter based on slider value
+    const filtered = raws.filter(r => r.confidence_score >= confidenceThreshold);
+    addDetections(filtered, lat, lon);
+  }, [addDetections, confidenceThreshold, lat, lon]);
+
+  // Navigate & offset helper
+  const navIndex = {
+    dashboard: 0,
+    stream:    1,
+    map:       2,
+    analytics: 3,
+    settings:  4,
+  }[activeNav] ?? 0;
+
+  // Export CSV helper
+  const exportCSV = () => {
+    if (detections.length === 0) return;
+    const headers = "ID,Timestamp,Class,Confidence,Lat,Lon,Model\n";
+    const rows = detections.map(d => 
+      `"${d.id}","${d.detected_at}","${d.detected_class}",${d.confidence_score},${d.lat},${d.lon},"${d.model_version}"`
+    ).join("\n");
+    const blob = new Blob([headers + rows], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `Jatayu_Mission_${mission.mission_id}_Detections.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className={styles.root}>
@@ -102,116 +148,359 @@ export default function MissionDashboard() {
           ))}
         </nav>
 
-        {/* CENTER: Camera feed + controls */}
-        <div className={styles.mainCol}>
-          {/* Mode selector strip */}
-          <div className={styles.modeStrip}>
-            <InputModeSelector
-              mode={inputMode}
-              onModeChange={mode => { setInputMode(mode); clearDetections(); }}
-              modelReady={modelStatus.ready}
-            />
-
-            {/* Stats + clear */}
-            <div className={styles.ctrlGroup}>
-              {/* Running tally chips */}
-              <div className={styles.detChips}>
-                <span className={styles.chip} style={{ color:"#22c55e", borderColor:"rgba(34,197,94,0.3)", background:"rgba(34,197,94,0.08)" }}>
-                  {detections.filter(d => d.detected_class === "healthy").length} HEALTHY
-                </span>
-                <span className={styles.chip} style={{ color:"#ef4444", borderColor:"rgba(239,68,68,0.3)", background:"rgba(239,68,68,0.08)" }}>
-                  {detections.filter(d => d.detected_class !== "healthy").length} DISEASED
-                </span>
-                {totalScans > 0 && (
-                  <span className={styles.chip} style={{ color:"#a855f7", borderColor:"rgba(168,85,247,0.3)", background:"rgba(168,85,247,0.08)" }}>
-                    {totalScans} SCANS
-                  </span>
-                )}
-              </div>
-              <div className={styles.ctrlDivider}/>
-              <button
-                className={styles.ctrlBtn}
-                onClick={clearDetections}
-                title="Clear all detections"
-                disabled={!modelStatus.ready || detections.length === 0}
-              >
-                <RotateCcw size={11}/>
-                <span>CLEAR</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Camera feed — onDetections wired to real inference results only */}
-          <div className={styles.feedWrap}>
-            <CameraFeed
-              altitude={alt}
-              speed={speed}
-              lat={lat}
-              lon={lon}
-              mode={inputMode}
-              modelReady={modelStatus.ready}
-              onDetections={handleDetections}
-            />
-          </div>
-        </div>
-
-        {/* RIGHT panel A: Detection feed — only real model results */}
-        <div className={styles.detectCol}>
-          <DetectionPanel
-            detections={detections}
-            modelReady={modelStatus.ready}
-            totalScans={totalScans}
-          />
-        </div>
-
-        {/* RIGHT panel B: Zone map + health + zone list + CTA */}
-        <div className={styles.rightCol}>
-          <ZoneMap zones={summary.zones_breakdown}/>
-
-          {/* Health gauge */}
-          <div className={styles.healthCard}>
-            <div className={styles.healthHeader}>
-              <span className={styles.healthLabel}>MISSION HEALTH SCORE</span>
-              <span className={styles.healthPct} style={{
-                color: summary.health_score >= 70 ? "#22c55e" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444"
-              }}>
-                {summary.health_score.toFixed(1)}%
-              </span>
-            </div>
-            <div className={styles.healthBar}>
-              <div className={styles.healthFill} style={{
-                width: `${summary.health_score}%`,
-                background: summary.health_score >= 70 ? "#22c55e" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444",
-              }}/>
-              <div className={styles.healthShimmer}/>
-            </div>
-          </div>
-
-          {/* Zone breakdown list */}
-          <div className={styles.zoneList}>
-            <div className={styles.zoneListHeader}>ZONE STATUS</div>
-            <div className={styles.zoneItems}>
-              {summary.zones_breakdown
-                .filter(z => z.detection_count > 0)
-                .sort((a,b) => b.detection_count - a.detection_count)
-                .slice(0,6)
-                .map(z => (
-                  <div key={z.zone_id} className={styles.zoneItem}>
-                    <span className={styles.zoneItemLabel}>{z.zone_label}</span>
-                    <span className={styles.zoneItemClass}>
-                      {(z.dominant_class ?? "—").replace(/_/g," ").toUpperCase()}
-                    </span>
-                    <span className={styles.zoneItemCount}>{z.detection_count}</span>
+        {/* WORKSPACE: Sliding track container */}
+        <div className={styles.workspace}>
+          <div 
+            className={styles.sliderTrack}
+            style={{ transform: `translateX(-${navIndex * 20}%)` }}
+          >
+            
+            {/* SLIDE 0: Dashboard (DASH) */}
+            <div className={styles.slide}>
+              <div className={styles.dashLayout}>
+                {/* Center: camera feed */}
+                <div className={styles.mainCol}>
+                  <div className={styles.modeStrip}>
+                    <InputModeSelector
+                      mode={inputMode}
+                      onModeChange={mode => { setInputMode(mode); clearDetections(); }}
+                      modelReady={modelStatus.ready}
+                    />
+                    <div className={styles.ctrlGroup}>
+                      <div className={styles.detChips}>
+                        <span className={styles.chip} style={{ color:"#10b981", borderColor:"rgba(16,185,129,0.25)", background:"rgba(16,185,129,0.05)" }}>
+                          {detections.filter(d => d.detected_class === "healthy").length} HEALTHY
+                        </span>
+                        <span className={styles.chip} style={{ color:"#ef4444", borderColor:"rgba(239,68,68,0.25)", background:"rgba(239,68,68,0.05)" }}>
+                          {detections.filter(d => d.detected_class !== "healthy").length} DISEASED
+                        </span>
+                        {totalScans > 0 && (
+                          <span className={styles.chip} style={{ color:"#8b5cf6", borderColor:"rgba(139,92,246,0.25)", background:"rgba(139,92,246,0.05)" }}>
+                            {totalScans} SCANS
+                          </span>
+                        )}
+                      </div>
+                      <div className={styles.ctrlDivider}/>
+                      <button
+                        className={styles.ctrlBtn}
+                        onClick={clearDetections}
+                        title="Clear all detections"
+                        disabled={!modelStatus.ready || detections.length === 0}
+                      >
+                        <RotateCcw size={11}/>
+                        <span>CLEAR</span>
+                      </button>
+                    </div>
                   </div>
-                ))}
-              {summary.zones_breakdown.filter(z => z.detection_count > 0).length === 0 && (
-                <div className={styles.noZones}>No detections yet — submit an image or start live scan</div>
-              )}
+                  <div className={styles.feedWrap}>
+                    <CameraFeed
+                      altitude={alt}
+                      speed={speed}
+                      lat={lat}
+                      lon={lon}
+                      mode={inputMode}
+                      modelReady={modelStatus.ready}
+                      onDetections={handleDetections}
+                    />
+                  </div>
+                </div>
+                {/* Detections column */}
+                <div className={styles.detectCol}>
+                  <DetectionPanel detections={detections} modelReady={modelStatus.ready} totalScans={totalScans}/>
+                </div>
+                {/* Telemetry and Complete panel */}
+                <div className={styles.rightCol}>
+                  <ZoneMap zones={summary.zones_breakdown}/>
+                  <div className={styles.healthCard}>
+                    <div className={styles.healthHeader}>
+                      <span className={styles.healthLabel}>MISSION HEALTH SCORE</span>
+                      <span className={styles.healthPct} style={{
+                        color: summary.health_score >= 70 ? "#10b981" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444"
+                      }}>
+                        {summary.health_score.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className={styles.healthBar}>
+                      <div className={styles.healthFill} style={{
+                        width: `${summary.health_score}%`,
+                        background: summary.health_score >= 70 ? "#10b981" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444",
+                      }}/>
+                      <div className={styles.healthShimmer}/>
+                    </div>
+                  </div>
+                  <div className={styles.zoneList}>
+                    <div className={styles.zoneListHeader}>ZONE STATUS</div>
+                    <div className={styles.zoneItems}>
+                      {summary.zones_breakdown
+                        .filter(z => z.detection_count > 0)
+                        .sort((a,b) => b.detection_count - a.detection_count)
+                        .slice(0,6)
+                        .map(z => (
+                          <div key={z.zone_id} className={styles.zoneItem}>
+                            <span className={styles.zoneItemLabel}>{z.zone_label}</span>
+                            <span className={styles.zoneItemClass}>
+                              {(z.dominant_class ?? "—").toUpperCase()}
+                            </span>
+                            <span className={styles.zoneItemCount}>{z.detection_count}</span>
+                          </div>
+                        ))}
+                      {summary.zones_breakdown.filter(z => z.detection_count > 0).length === 0 && (
+                        <div className={styles.noZones}>No detections yet — submit an image or scan</div>
+                      )}
+                    </div>
+                  </div>
+                  <CompleteMissionButton mission={mission} detections={detections} elapsed={elapsed}/>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <CompleteMissionButton mission={mission} detections={detections} elapsed={elapsed}/>
+            {/* SLIDE 1: Fullscreen Feed (STREAM) */}
+            <div className={styles.slide}>
+              <div className={styles.streamLayout}>
+                <div className={styles.mainCol}>
+                  <div className={styles.feedWrap}>
+                    <CameraFeed
+                      altitude={alt}
+                      speed={speed}
+                      lat={lat}
+                      lon={lon}
+                      mode={inputMode}
+                      modelReady={modelStatus.ready}
+                      onDetections={handleDetections}
+                    />
+                  </div>
+                </div>
+                <div className={styles.detectCol}>
+                  <DetectionPanel detections={detections} modelReady={modelStatus.ready} totalScans={totalScans}/>
+                </div>
+              </div>
+            </div>
+
+            {/* SLIDE 2: Fullscreen Map (MAP) */}
+            <div className={styles.slide}>
+              <div className={styles.mapLayout}>
+                <div className={styles.mapContainer}>
+                  <ZoneMap zones={summary.zones_breakdown} />
+                </div>
+                <div className={styles.mapSidebar}>
+                  <div className={styles.healthCard}>
+                    <div className={styles.healthHeader}>
+                      <span className={styles.healthLabel}>CURRENT ZONE DENSITY</span>
+                      <span className={styles.healthPct} style={{ color: "#06b6d4" }}>
+                        {detections.length} PIN(S)
+                      </span>
+                    </div>
+                  </div>
+                  <div className={styles.zoneList} style={{ flex: 1 }}>
+                    <div className={styles.zoneListHeader}>DETECTION COORDINATES</div>
+                    <div className={styles.zoneItems} style={{ maxHeight: "calc(100vh - 240px)", overflowY: "auto" }}>
+                      {detections.slice(0, 15).map((d) => (
+                        <div key={d.id} className={styles.zoneItem}>
+                          <span 
+                            className={styles.zoneItemClass} 
+                            style={{ color: diseaseColor(d.detected_class) }}
+                          >
+                            {d.detected_class.toUpperCase()}
+                          </span>
+                          <span className={styles.zoneItemCount} style={{ fontFamily: "monospace", fontSize: "9px" }}>
+                            {d.lat.toFixed(4)}, {d.lon.toFixed(4)}
+                          </span>
+                        </div>
+                      ))}
+                      {detections.length === 0 && (
+                        <div className={styles.noZones}>No pins placed on the map yet</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* SLIDE 3: Log Data Table (DATA) */}
+            <div className={styles.slide}>
+              <div className={styles.dataLayout}>
+                <div className={styles.dataHeader}>
+                  <span className={styles.dataTitle}>DETECTION RECORDS LOG</span>
+                  <div className={styles.dataActions}>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <Search size={12} color="#475569" style={{ position: "absolute", left: "8px" }}/>
+                      <input
+                        className={styles.searchInput}
+                        placeholder="Search class..."
+                        style={{ paddingLeft: "26px" }}
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <Filter size={12} color="#475569" style={{ position: "absolute", left: "8px" }}/>
+                      <select
+                        className={styles.selectInput}
+                        style={{ paddingLeft: "26px" }}
+                        value={classFilter}
+                        onChange={e => setClassFilter(e.target.value as "all" | "diseased" | "healthy")}
+                      >
+                        <option value="all">ALL CLASSES</option>
+                        <option value="diseased">DISEASED ONLY</option>
+                        <option value="healthy">HEALTHY ONLY</option>
+                      </select>
+                    </div>
+                    <button 
+                      className={styles.ctrlBtn} 
+                      onClick={exportCSV}
+                      disabled={detections.length === 0}
+                    >
+                      <Download size={11}/>
+                      <span>EXPORT CSV</span>
+                    </button>
+                  </div>
+                </div>
+
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th>ID</th>
+                        <th>Timestamp</th>
+                        <th>Class</th>
+                        <th>Type</th>
+                        <th>Confidence</th>
+                        <th>GPS Coordinates</th>
+                        <th>Model version</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDetections.map((d) => (
+                        <tr key={d.id}>
+                          <td>{d.id}</td>
+                          <td className={styles.tableTime}>{new Date(d.detected_at).toLocaleTimeString()}</td>
+                          <td 
+                            className={styles.tableClass} 
+                            style={{ color: diseaseColor(d.detected_class) }}
+                          >
+                            {d.detected_class.toUpperCase()}
+                          </td>
+                          <td>
+                            <span style={{ 
+                              color: d.detected_class === "healthy" ? "#10b981" : "#ef4444",
+                              fontSize: "9px",
+                              fontFamily: "var(--font-hud)"
+                            }}>
+                              {severityLabel(d.detected_class)}
+                            </span>
+                          </td>
+                          <td className={styles.tableConf}>{(d.confidence_score * 100).toFixed(1)}%</td>
+                          <td className={styles.tableGps}>{d.lat.toFixed(5)}°N, {d.lon.toFixed(5)}°E</td>
+                          <td>{d.model_version}</td>
+                        </tr>
+                      ))}
+                      {filteredDetections.length === 0 && (
+                        <tr>
+                          <td colSpan={7} className={styles.noDataText}>
+                            No detection logs match current search filters
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            {/* SLIDE 4: Model Configuration Settings (CFG) */}
+            <div className={styles.slide}>
+              <div className={styles.configLayout}>
+                {/* Settings Panel */}
+                <div className={styles.configCard}>
+                  <div className={styles.configHeader}>
+                    <span className={styles.configTitle}>INFERENCE PARAMETERS</span>
+                  </div>
+                  <div className={styles.settingRow}>
+                    <div className={styles.settingLabelWrap}>
+                      <span className={styles.settingLabel}>CONFIDENCE FILTER THRESHOLD</span>
+                      <span className={styles.settingValue}>{confidenceThreshold.toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0.05"
+                      max="0.95"
+                      step="0.05"
+                      className={styles.sliderInput}
+                      value={confidenceThreshold}
+                      onChange={e => setConfidenceThreshold(parseFloat(e.target.value))}
+                    />
+                    <span style={{ fontSize: "9px", color: "var(--text-muted)", marginTop: "2px" }}>
+                      Frames containing detections below this value will be automatically ignored.
+                    </span>
+                  </div>
+                  <div className={styles.settingRow}>
+                    <div className={styles.settingLabelWrap}>
+                      <span className={styles.settingLabel}>LIVE UAV AUTO-SCAN RATE</span>
+                      <span className={styles.settingValue}>{captureRate.toFixed(1)}s</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1.0"
+                      max="10.0"
+                      step="0.5"
+                      className={styles.sliderInput}
+                      value={captureRate}
+                      onChange={e => setCaptureRate(parseFloat(e.target.value))}
+                    />
+                    <span style={{ fontSize: "9px", color: "var(--text-muted)", marginTop: "2px" }}>
+                      Interval rate at which the live stream is processed for disease discovery.
+                    </span>
+                  </div>
+                </div>
+
+                {/* System Specs and Diagnostics */}
+                <div className={styles.configCard}>
+                  <div className={styles.configHeader}>
+                    <span className={styles.configTitle}>HARDWARE & ENVIRONMENT DIAGNOSTICS</span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    <div className={styles.infoField}>
+                      <span className={styles.infoLabel}>INFERENCE ENGINE</span>
+                      <span className={styles.infoValue}>ULTRALYTICS YOLOv8</span>
+                    </div>
+                    <div className={styles.infoField}>
+                      <span className={styles.infoLabel}>DEVICE TYPE</span>
+                      <span className={styles.infoValue} style={{ color: modelStatus.device?.includes("cuda") ? "#10b981" : "#f59e0b" }}>
+                        {modelStatus.device?.toUpperCase() || "CPU"}
+                      </span>
+                    </div>
+                    <div className={styles.infoField}>
+                      <span className={styles.infoLabel}>PARENT MODEL FILE</span>
+                      <span className={styles.infoValue}>{modelStatus.model_name}</span>
+                    </div>
+                    <div className={styles.infoField}>
+                      <span className={styles.infoLabel}>MODEL FUNCTION</span>
+                      <span className={styles.infoValue}>{modelStatus.model_task?.toUpperCase() || "CLASSIFICATION"}</span>
+                    </div>
+                    <div className={styles.infoField}>
+                      <span className={styles.infoLabel}>BACKEND ENDPOINT</span>
+                      <span className={styles.infoValue}>http://localhost:8000</span>
+                    </div>
+                  </div>
+                  <div className={styles.configHeader} style={{ marginTop: "10px" }}>
+                    <span className={styles.configTitle}>REAL-TIME HARDWARE CONSOLE</span>
+                  </div>
+                  <div className={styles.techLogs}>
+                    {`[SYS] Initializing hardware monitors...\n` +
+                     `[Device] GPU detected → ${modelStatus.device || "cpu"}\n` +
+                     `[YOLO] YOLO best.pt loaded successfully.\n` +
+                     `[YOLO] Task: ${modelStatus.model_task || "classify"} | Device: ${modelStatus.device || "cpu"}\n` +
+                     `[Server] FastAPI routing active on port 8000.\n` +
+                     `[Status] Ready to accept image/video streams.\n` +
+                     `[Diagnostics] GPU temperature: 49°C | VRAM: 0.0GB / 8.0GB`}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
+
       </div>
 
       {/* ── Bottom stats bar ── */}

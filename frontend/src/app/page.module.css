@@ -7,15 +7,14 @@
   background: var(--bg-base);
   overflow: hidden;
   background-image:
-    linear-gradient(rgba(0,212,255,0.012) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,212,255,0.012) 1px, transparent 1px);
+    linear-gradient(rgba(6, 182, 212, 0.007) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(6, 182, 212, 0.007) 1px, transparent 1px);
   background-size: 60px 60px;
 }
 
-/* ── Main body — 4-column grid: sidebar | main | detections | right ── */
+/* ── Body: sidebar + workspace ── */
 .body {
-  display: grid;
-  grid-template-columns: 64px 1fr 300px 260px;
+  display: flex;
   gap: 10px;
   padding: 10px;
   flex: 1;
@@ -24,7 +23,7 @@
 }
 
 /* ─────────────────────────────────────────────────────── */
-/* Sidebar nav                                              */
+/* Sidebar nav                                             */
 /* ─────────────────────────────────────────────────────── */
 .sidebar {
   display: flex;
@@ -37,6 +36,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   flex-shrink: 0;
+  width: 64px;
 }
 
 .navBtn {
@@ -46,7 +46,7 @@
   gap: 4px;
   width: 48px;
   padding: 10px 0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-muted);
@@ -56,14 +56,13 @@
 
 .navBtn:hover {
   color: var(--text-secondary);
-  background: rgba(255,255,255,0.04);
+  background: rgba(255,255,255,0.02);
 }
 
 .navActive {
-  color: #00d4ff !important;
-  background: rgba(0,212,255,0.1) !important;
-  border-color: rgba(0,212,255,0.25) !important;
-  box-shadow: 0 0 12px rgba(0,212,255,0.08);
+  color: var(--cyan) !important;
+  background: var(--cyan-dim) !important;
+  border-color: rgba(6, 182, 212, 0.15) !important;
 }
 
 .navLabel {
@@ -74,16 +73,55 @@
 }
 
 /* ─────────────────────────────────────────────────────── */
-/* Main column (feed + controls)                           */
+/* Workspace and Sliding View Track                        */
+/* ─────────────────────────────────────────────────────── */
+.workspace {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  min-height: 0;
+  border-radius: var(--radius-md);
+}
+
+.sliderTrack {
+  display: flex;
+  width: 500%; /* 5 views */
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide {
+  width: 20%; /* 1/5th of the track */
+  height: 100%;
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* Slide 0: Dashboard Layout Grid */
+.dashLayout {
+  display: grid;
+  grid-template-columns: 1fr 300px 260px;
+  gap: 10px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* Components Common layouts                               */
 /* ─────────────────────────────────────────────────────── */
 .mainCol {
   display: flex;
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  flex: 1;
 }
 
-/* Mode strip: InputModeSelector + controls in one row */
 .modeStrip {
   display: flex;
   align-items: center;
@@ -96,7 +134,6 @@
   flex-shrink: 0;
 }
 
-/* Control group (pause, clear, chips) */
 .ctrlGroup {
   display: flex;
   align-items: center;
@@ -109,9 +146,9 @@
   align-items: center;
   gap: 4px;
   padding: 5px 10px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 5px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 4px;
   cursor: pointer;
   color: var(--text-secondary);
   font-family: var(--font-hud);
@@ -120,12 +157,11 @@
   letter-spacing: 0.08em;
   transition: all 0.2s;
 }
-.ctrlBtn:hover:not(:disabled) { border-color: var(--border-cyan); color: var(--cyan); }
+.ctrlBtn:hover:not(:disabled) { border-color: var(--border-bright); color: var(--cyan); }
 .ctrlBtn:active:not(:disabled) { transform: scale(0.96); }
 .ctrlBtn:disabled { opacity: 0.35; cursor: not-allowed; }
-.ctrlActive { border-color: rgba(245,158,11,0.4) !important; color: #f59e0b !important; }
 
-.ctrlDivider { width: 1px; height: 18px; background: rgba(255,255,255,0.06); }
+.ctrlDivider { width: 1px; height: 18px; background: rgba(255,255,255,0.04); }
 
 .detChips { display: flex; gap: 5px; }
 .chip {
@@ -138,36 +174,34 @@
   border: 1px solid;
 }
 
-/* Feed viewport */
 .feedWrap {
   flex: 1;
   min-height: 0;
   border-radius: var(--radius-md);
   overflow: hidden;
+  border: 1px solid var(--border);
 }
 
-/* ─────────────────────────────────────────────────────── */
-/* Detection column                                        */
-/* ─────────────────────────────────────────────────────── */
 .detectCol {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  width: 300px;
+  flex-shrink: 0;
 }
 
-/* ─────────────────────────────────────────────────────── */
-/* Right column (zone map + health + zone list + CTA)      */
-/* ─────────────────────────────────────────────────────── */
 .rightCol {
   display: flex;
   flex-direction: column;
   gap: 8px;
   overflow-y: auto;
   min-height: 0;
+  width: 260px;
+  flex-shrink: 0;
 }
 
-/* ── Health card ── */
+/* ── Health Card ── */
 .healthCard {
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
@@ -194,21 +228,21 @@
 
 .healthPct {
   font-family: var(--font-hud);
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 800;
 }
 
 .healthBar {
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(255,255,255,0.06);
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.04);
   overflow: hidden;
   position: relative;
 }
 
 .healthFill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 2px;
   transition: width 0.8s cubic-bezier(.16,1,.3,1);
   position: relative;
 }
@@ -216,17 +250,12 @@
 .healthShimmer {
   position: absolute;
   inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
   background-size: 200%;
-  animation: shimmer 2s infinite;
+  animation: shimmer 3s infinite linear;
 }
 
-@keyframes shimmer {
-  0%   { background-position: -200% 0; }
-  100% { background-position:  200% 0; }
-}
-
-/* ── Zone list ── */
+/* ── Zone List ── */
 .zoneList {
   background: var(--bg-glass);
   backdrop-filter: blur(16px);
@@ -252,7 +281,7 @@
   align-items: center;
   gap: 8px;
   padding: 3px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid rgba(255,255,255,0.02);
 }
 
 .zoneItemLabel {
@@ -269,7 +298,7 @@
   font-size: 8px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: #f59e0b;
+  color: var(--amber);
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -291,4 +320,304 @@
   letter-spacing: 0.08em;
   text-align: center;
   padding: 8px 0;
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* Slide 1: STREAM Layout                                  */
+/* ─────────────────────────────────────────────────────── */
+.streamLayout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 10px;
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* Slide 2: MAP Layout                                     */
+/* ─────────────────────────────────────────────────────── */
+.mapLayout {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  gap: 10px;
+}
+
+.mapContainer {
+  flex: 1;
+  height: 100%;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.mapSidebar {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  flex-shrink: 0;
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* Slide 3: DATA (Table) Layout                            */
+/* ─────────────────────────────────────────────────────── */
+.dataLayout {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  gap: 10px;
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  backdrop-filter: blur(16px);
+}
+
+.dataHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dataTitle {
+  font-family: var(--font-hud);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--cyan);
+}
+
+.dataActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.searchInput {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 11px;
+  width: 200px;
+  outline: none;
+  transition: all 0.2s;
+}
+
+.searchInput:focus {
+  border-color: var(--border-bright);
+  background: rgba(255,255,255,0.04);
+}
+
+.selectInput {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 12px;
+  color: var(--text-primary);
+  font-family: var(--font-hud);
+  font-size: 9px;
+  outline: none;
+  cursor: pointer;
+}
+
+.tableWrap {
+  flex: 1;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(5,8,16,0.3);
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.table th {
+  font-family: var(--font-hud);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.02);
+  border-bottom: 1px solid var(--border);
+  text-transform: uppercase;
+}
+
+.table td {
+  padding: 10px 14px;
+  font-size: 11px;
+  border-bottom: 1px solid rgba(255,255,255,0.02);
+  color: var(--text-secondary);
+}
+
+.table tr:hover td {
+  background: rgba(255,255,255,0.01);
+  color: var(--text-primary);
+}
+
+.tableClass {
+  font-family: var(--font-hud);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+
+.tableConf {
+  font-family: var(--font-hud);
+  font-weight: 700;
+}
+
+.tableGps {
+  font-family: var(--font-hud);
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.tableTime {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.noDataText {
+  text-align: center;
+  padding: 40px 0;
+  font-family: var(--font-hud);
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+/* ─────────────────────────────────────────────────────── */
+/* Slide 4: CONFIG Layout                                  */
+/* ─────────────────────────────────────────────────────── */
+.configLayout {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.configCard {
+  background: var(--bg-glass);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  backdrop-filter: blur(16px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.configHeader {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 8px;
+  margin-bottom: 4px;
+}
+
+.configTitle {
+  font-family: var(--font-hud);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: var(--cyan);
+}
+
+.settingRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settingLabelWrap {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settingLabel {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+
+.settingValue {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--cyan);
+}
+
+.sliderInput {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.06);
+  outline: none;
+  cursor: pointer;
+}
+
+.sliderInput::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--cyan);
+  border: 1px solid var(--bg-surface);
+  transition: transform 0.1s;
+}
+
+.sliderInput::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.infoField {
+  display: flex;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: rgba(255,255,255,0.01);
+  border: 1px solid rgba(255,255,255,0.02);
+  border-radius: 5px;
+}
+
+.infoLabel {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.infoValue {
+  font-family: var(--font-hud);
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.techLogs {
+  flex: 1;
+  background: rgba(5,8,16,0.5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  font-family: monospace;
+  font-size: 10px;
+  color: #38bdf8;
+  overflow-y: auto;
+  line-height: 1.5;
+  white-space: pre-wrap;
 }

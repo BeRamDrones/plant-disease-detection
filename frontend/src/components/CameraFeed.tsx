@@ -21,6 +21,7 @@ interface Props {
   modelReady: boolean;
   /** Called with raw detection results from the backend inference endpoint */
   onDetections: (raws: RawDetection[]) => void;
+  scanInterval?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,9 +136,11 @@ function ImageMode({
 function VideoMode({
   modelReady,
   onDetections,
+  scanInterval = 3,
 }: {
   modelReady: boolean;
   onDetections: (raws: RawDetection[]) => void;
+  scanInterval?: number;
 }) {
   const videoRef   = useRef<HTMLVideoElement>(null);
   const canvasRef  = useRef<HTMLCanvasElement>(null);
@@ -192,7 +195,7 @@ function VideoMode({
         videoRef.current.play().catch(() => {});
       }
       captureAndInfer();
-      timerRef.current = setInterval(captureAndInfer, 3000);
+      timerRef.current = setInterval(captureAndInfer, scanInterval * 1000);
     } else {
       if (videoRef.current && !videoRef.current.paused) {
         videoRef.current.pause();
@@ -281,11 +284,12 @@ function VideoMode({
 // LIVE UAV MODE
 // ─────────────────────────────────────────────────────────────────────────────
 function LiveUAVMode({
-  altitude, speed, lat, lon, modelReady, onDetections,
+  altitude, speed, lat, lon, modelReady, onDetections, scanInterval = 4,
 }: {
   altitude: number; speed: number; lat: number; lon: number;
   modelReady: boolean;
   onDetections: (raws: RawDetection[]) => void;
+  scanInterval?: number;
 }) {
   const videoRef    = useRef<HTMLVideoElement>(null);
   const canvasRef   = useRef<HTMLCanvasElement>(null);
@@ -339,7 +343,7 @@ function LiveUAVMode({
       if (captureRef.current) { clearInterval(captureRef.current); captureRef.current = null; }
     } else {
       setAutoCapture(true);
-      captureRef.current = setInterval(captureFrame, LIVE_CAPTURE_INTERVAL);
+      captureRef.current = setInterval(captureFrame, scanInterval * 1000);
     }
   };
 
@@ -493,20 +497,21 @@ function LiveUAVMode({
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
-export default function CameraFeed({ altitude, speed, lat, lon, mode, modelReady, onDetections }: Props) {
+export default function CameraFeed({ altitude, speed, lat, lon, mode, modelReady, onDetections, scanInterval }: Props) {
   return (
     <div className={styles.container}>
       {mode === "image" && (
         <ImageMode modelReady={modelReady} onDetections={onDetections} />
       )}
       {mode === "video" && (
-        <VideoMode modelReady={modelReady} onDetections={onDetections} />
+        <VideoMode modelReady={modelReady} onDetections={onDetections} scanInterval={scanInterval} />
       )}
       {mode === "live" && (
         <LiveUAVMode
           altitude={altitude} speed={speed} lat={lat} lon={lon}
           modelReady={modelReady}
           onDetections={onDetections}
+          scanInterval={scanInterval}
         />
       )}
     </div>
