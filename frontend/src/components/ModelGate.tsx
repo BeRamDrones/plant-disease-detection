@@ -40,7 +40,7 @@ export default function ModelGate({ status }: Props) {
         <div className={styles.iconWrap}>
           <div className={styles.ring1} />
           <div className={styles.ring2} />
-          <Cpu size={36} color="#00d4ff" strokeWidth={1.2} />
+          <Cpu size={36} color="#00F0FF" strokeWidth={1.2} />
         </div>
 
         {/* Branding */}
@@ -51,8 +51,8 @@ export default function ModelGate({ status }: Props) {
         <div className={styles.statusBlock}>
           {status.error ? (
             <>
-              <WifiOff size={16} color="#ef4444" />
-              <span className={styles.statusText} style={{ color: "#ef4444" }}>
+              <WifiOff size={16} color="#FF2D95" />
+              <span className={styles.statusText} style={{ color: "#FF2D95" }}>
                 BACKEND UNREACHABLE — RETRYING…
               </span>
             </>

@@ -104,7 +104,7 @@ export default function ZoneMap({ zones: propZones, detections = [] }: Props) {
       {/* Header */}
       <div className={styles.hdr}>
         <div className={styles.hdrLeft}>
-          <Layers size={13} color="#00d4ff"/>
+          <Layers size={13} color="#00F0FF"/>
           <span className={styles.title}>RUNTIME FIELD ZONES</span>
         </div>
         <div className={styles.hdrRight}>
@@ -127,7 +127,7 @@ export default function ZoneMap({ zones: propZones, detections = [] }: Props) {
         /* Standby state when no field zones have formed yet */
         <div className={styles.emptyState}>
           <div className={styles.radarWrapper}>
-            <Radar size={32} color="rgba(0,212,255,0.4)" className={styles.radarSpin}/>
+            <Radar size={32} color="rgba(0,240,255,0.4)" className={styles.radarSpin}/>
             <div className={styles.radarPulse}/>
           </div>
           <span className={styles.emptyTitle}>NO RUNTIME ZONES FORMED YET</span>
@@ -145,8 +145,8 @@ export default function ZoneMap({ zones: propZones, detections = [] }: Props) {
           </span>
         ) : (
           <div className={styles.footStat}>
-            <MapPin size={10} color="#00d4ff"/>
-            <span style={{ color: "#00d4ff" }}>
+            <MapPin size={10} color="#00F0FF"/>
+            <span style={{ color: "#00F0FF" }}>
               {activeZones.length} Sector Zone(s) Formed · {totalDets} Total Detections
             </span>
           </div>

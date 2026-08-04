@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Satellite, Battery, Gauge, Wind } from "lucide-react";
+import { Satellite, Battery } from "lucide-react";
 import { MissionData } from "@/lib/types";
 import { ModelStatus } from "@/hooks/useModelStatus";
 import styles from "./MissionHeader.module.css";
@@ -11,29 +11,27 @@ interface Props {
   signalStrength: number;
   battery: number;
   modelStatus: ModelStatus;
-  altitude?: number;
-  speed?: number;
 }
 
 export default function MissionHeader({
-  mission, signalStrength, battery, modelStatus, altitude = 0, speed = 0,
+  mission, signalStrength, battery, modelStatus, elapsed,
 }: Props) {
-  const batColor = battery > 50 ? "#22c55e" : battery > 20 ? "#f59e0b" : "#ef4444";
+  const batColor = battery > 50 ? "#00F0FF" : battery > 20 ? "#3B82F6" : "#FF2D95";
   const sigBars  = Math.ceil(signalStrength / 20);
 
   const modelColor = modelStatus.ready
-    ? (modelStatus.mock_mode ? "#f59e0b" : "#22c55e")
-    : "#f59e0b";
+    ? (modelStatus.mock_mode ? "#3B82F6" : "#00F0FF")
+    : "#FF2D95";
 
   return (
     <header className={styles.header}>
       {/* ── LEFT: Brand ── */}
       <div className={styles.brand}>
         <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
-          <polygon points="16,2 30,26 2,26" stroke="#06b6d4" strokeWidth="1.5"
-            fill="rgba(6,182,212,0.08)" strokeLinejoin="round"/>
-          <circle cx="16" cy="18" r="3" fill="#06b6d4"/>
-          <line x1="16" y1="2" x2="16" y2="10" stroke="#06b6d4" strokeWidth="1" strokeDasharray="2 2"/>
+          <polygon points="16,2 30,26 2,26" stroke="#00F0FF" strokeWidth="1.5"
+            fill="rgba(0,240,255,0.08)" strokeLinejoin="round"/>
+          <circle cx="16" cy="18" r="3" fill="#00F0FF"/>
+          <line x1="16" y1="2" x2="16" y2="10" stroke="#00F0FF" strokeWidth="1" strokeDasharray="2 2"/>
         </svg>
         <div>
           <div className={styles.title}>PROJECT JATAYU</div>
@@ -53,50 +51,34 @@ export default function MissionHeader({
           <span className={styles.idValue}>{mission.drone_id}</span>
         </div>
         <div className={styles.separator}/>
-        {/* Model ready indicator — minimal dot only */}
         <div className={styles.missionId}>
-          <div
-            className={styles.modelDot}
-            style={{ background: modelColor, boxShadow: `0 0 8px ${modelColor}` }}
-            title={modelStatus.ready ? (modelStatus.mock_mode ? "Mock mode" : `Model ready (${modelStatus.model_task})`) : "Loading model…"}
-          />
-          <span className={styles.idLabel} style={{ color: modelColor }}>
-            {modelStatus.ready ? (modelStatus.mock_mode ? "MOCK" : "MODEL") : "LOADING"}
+          <span className={styles.idLabel}>STATUS</span>
+          <span className={styles.idValue} style={{ color: "#00F0FF" }}>
+            {mission.status.toUpperCase()}
+          </span>
+        </div>
+        <div className={styles.separator}/>
+        <div className={styles.missionId}>
+          <span className={styles.idLabel}>MODEL</span>
+          <span className={styles.modelDot} style={{ background: modelColor }}/>
+          <span className={styles.idValue} style={{ color: modelColor, fontSize: "9px" }}>
+            {modelStatus.ready
+              ? (modelStatus.mock_mode ? "MOCK DETECT" : modelStatus.model_name.toUpperCase())
+              : "CONNECTING…"}
           </span>
         </div>
       </div>
 
-      {/* ── RIGHT: Telemetry ── */}
+      {/* ── RIGHT: Drone Telemetry ── */}
       <div className={styles.telemetry}>
-
-        {/* Altitude */}
-        <div className={styles.telItem}>
-          <Gauge size={12} color="#94a3b8"/>
-          <div className={styles.telVal}>
-            <span className={styles.telNum}>{altitude.toFixed(0)}</span>
-            <span className={styles.telUnit}>m</span>
-          </div>
-        </div>
-
-        {/* Speed */}
-        <div className={styles.telItem}>
-          <Wind size={12} color="#94a3b8"/>
-          <div className={styles.telVal}>
-            <span className={styles.telNum}>{speed.toFixed(1)}</span>
-            <span className={styles.telUnit}>m/s</span>
-          </div>
-        </div>
-
-        <div className={styles.telDivider}/>
-
-        {/* Signal bars */}
-        <div className={styles.telItem}>
-          <Satellite size={12} color="#94a3b8"/>
+        {/* Signal */}
+        <div className={styles.telItem} title={`Signal: ${signalStrength}%`}>
+          <Satellite size={12} color="#00F0FF"/>
           <div className={styles.bars}>
             {[1,2,3,4,5].map(i => (
               <div key={i} className={styles.bar} style={{
-                height: `${i * 3 + 3}px`,
-                background: i <= sigBars ? "#06b6d4" : "rgba(255,255,255,0.1)",
+                height: `${i * 3 + 1}px`,
+                background: i <= sigBars ? "#00F0FF" : "rgba(0,240,255,0.15)",
               }}/>
             ))}
           </div>

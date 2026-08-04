@@ -39,6 +39,7 @@ function DetectionCard({ det, index }: { det: Detection; index: number }) {
             </div>
             <div className={styles.zoneLine}>
               {det.zone_label && <span className={styles.zoneChip}>Zone {det.zone_label}</span>}
+              {det.grid_zone && <span className={styles.gridChip}>{det.grid_zone.toUpperCase()}</span>}
               {det.rank && (
                 <span className={styles.rankChip}>#{det.rank}</span>
               )}
@@ -94,21 +95,21 @@ export default function DetectionPanel({ detections, modelReady, totalScans = 0,
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <Activity size={14} color="#00d4ff"/>
+          <Activity size={14} color="#00F0FF"/>
           <span className={styles.headerTitle}>LIVE DETECTIONS</span>
         </div>
         <div className={styles.headerStats}>
           {diseaseCount > 0 || healthyCount > 0 ? (
             <>
-              <span className={styles.statPill} style={{ color:"#22c55e", background:"rgba(34,197,94,0.1)", borderColor:"rgba(34,197,94,0.25)" }}>
+              <span className={styles.statPill} style={{ color:"#00F0FF", background:"rgba(0,240,255,0.1)", borderColor:"rgba(0,240,255,0.3)" }}>
                 {healthyCount} OK
               </span>
-              <span className={styles.statPill} style={{ color:"#ef4444", background:"rgba(239,68,68,0.1)", borderColor:"rgba(239,68,68,0.25)" }}>
+              <span className={styles.statPill} style={{ color:"#FF2D95", background:"rgba(255,45,149,0.15)", borderColor:"rgba(255,45,149,0.4)" }}>
                 {diseaseCount} DISEASED
               </span>
             </>
           ) : (
-            <span className={styles.statPill} style={{ color:"#00d4ff", background:"rgba(0,212,255,0.1)", borderColor:"rgba(0,212,255,0.25)" }}>
+            <span className={styles.statPill} style={{ color:"#00F0FF", background:"rgba(0,240,255,0.1)", borderColor:"rgba(0,240,255,0.3)" }}>
               {cropCount} CROPS
             </span>
           )}
@@ -134,14 +135,14 @@ export default function DetectionPanel({ detections, modelReady, totalScans = 0,
       <div className={styles.list}>
         {!modelReady ? (
           <div className={styles.empty}>
-            <Cpu size={28} color="rgba(245,158,11,0.3)"/>
-            <span style={{ color:"#f59e0b" }}>Loading parent model (best.pt)…</span>
+            <Cpu size={28} color="rgba(59,130,246,0.4)"/>
+            <span style={{ color:"#3B82F6" }}>Loading parent model (best.pt)…</span>
             <span style={{ fontSize:"10px", color:"var(--text-muted)" }}>Detection will begin once the model is ready</span>
           </div>
         ) : cameraOff ? (
           <div className={styles.empty}>
-            <VideoOff size={28} color="rgba(239,68,68,0.25)"/>
-            <span style={{ color:"#ef4444" }}>No Camera Detected</span>
+            <VideoOff size={28} color="rgba(255,45,149,0.3)"/>
+            <span style={{ color:"#FF2D95" }}>No Camera Detected</span>
             <span style={{ fontSize:"10px", color:"var(--text-muted)", textAlign:"center", lineHeight:1.5 }}>
               The UAV camera stream is offline.{"\n"}Enable the camera feed to begin AI detection.
             </span>

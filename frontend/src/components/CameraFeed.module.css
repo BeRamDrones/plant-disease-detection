@@ -5,7 +5,7 @@
   height: 100%;
   border-radius: var(--radius-md);
   overflow: hidden;
-  background: var(--bg-surface);
+  background: #161B26;
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -17,24 +17,24 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px dashed rgba(0,212,255,0.2);
+  border: 2px dashed var(--border);
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.25s ease;
   position: relative;
   overflow: hidden;
-  background: rgba(5,8,16,0.6);
+  background: #0E1117;
 }
 
 .dropZone:hover {
-  border-color: rgba(0,212,255,0.45);
-  background: rgba(0,212,255,0.03);
+  border-color: var(--cyan);
+  background: rgba(0, 240, 255, 0.03);
 }
 
 .dragOver {
-  border-color: #00d4ff !important;
-  background: rgba(0,212,255,0.06) !important;
-  box-shadow: inset 0 0 30px rgba(0,212,255,0.08);
+  border-color: #00F0FF !important;
+  background: rgba(0, 240, 255, 0.06) !important;
+  box-shadow: inset 0 0 30px rgba(0, 240, 255, 0.12);
 }
 
 .preview {
@@ -54,15 +54,15 @@
 
 .dropTitle {
   font-family: var(--font-hud);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.15em;
-  color: rgba(0,212,255,0.6);
+  color: var(--cyan);
 }
 
 .dropSub {
   font-family: var(--font-body);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -70,25 +70,25 @@
 .analysisOverlay {
   position: absolute;
   inset: 0;
-  background: rgba(5,8,16,0.75);
+  background: rgba(14, 17, 23, 0.88);
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   gap: 14px;
   font-family: var(--font-hud);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.12em;
-  color: #00d4ff;
-  backdrop-filter: blur(4px);
+  color: var(--cyan);
+  backdrop-filter: blur(8px);
 }
 
 .analysisSpin {
   width: 36px;
   height: 36px;
-  border: 2px solid rgba(0,212,255,0.15);
-  border-top-color: #00d4ff;
+  border: 2px solid rgba(0, 240, 255, 0.15);
+  border-top-color: #00F0FF;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -104,15 +104,16 @@
   bottom: 16px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 6px 18px;
-  background: rgba(10,14,26,0.9);
-  border: 1px solid rgba(0,212,255,0.3);
+  padding: 8px 22px;
+  background: #1C222E;
+  border: 1px solid var(--cyan);
   border-radius: 20px;
   font-family: var(--font-hud);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #00d4ff;
+  color: #00F0FF;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
   backdrop-filter: blur(8px);
   white-space: nowrap;
   animation: slideUp 0.4s cubic-bezier(.16,1,.3,1) forwards;
@@ -134,7 +135,7 @@
   align-items: center;
   justify-content: center;
   position: relative;
-  background: var(--bg-surface);
+  background: #161B26;
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -152,55 +153,61 @@
   width: 100%;
   min-height: 0;
   object-fit: contain;
-  background: #020408;
+  background: #0E1117;
 }
 
 .videoControls {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: rgba(10,14,26,0.9);
-  border-top: 1px solid rgba(255,255,255,0.05);
+  gap: 10px;
+  padding: 10px 14px;
+  background: #0E1117;
+  border-top: 1px solid var(--border);
   width: 100%;
   flex-shrink: 0;
 }
 
+/* Primary Button Rule for scanBtn */
 .scanBtn {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 5px 12px;
+  gap: 6px;
+  padding: 8px 16px;
   border-radius: 6px;
-  border: 1px solid rgba(0,212,255,0.3);
-  background: rgba(0,212,255,0.08);
-  color: #00d4ff;
+  border: 1px solid #00F0FF;
+  background: #00F0FF;
+  color: #0E1117;
   font-family: var(--font-hud);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   cursor: pointer;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.35);
   transition: all 0.2s;
 }
 
 .scanBtn:disabled {
-  opacity: 0.4;
+  opacity: 0.28;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .scanBtn:hover:not(:disabled):not(.scanActive) {
-  background: rgba(0,212,255,0.15);
+  background: #33F3FF;
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.5);
+  color: #0E1117;
 }
 
 .scanActive {
-  border-color: rgba(239,68,68,0.4) !important;
-  background: rgba(239,68,68,0.08) !important;
-  color: #ef4444 !important;
+  border-color: #FF2D95 !important;
+  background: #FF2D95 !important;
+  color: #FFFFFF !important;
+  box-shadow: 0 0 16px rgba(255, 45, 149, 0.35) !important;
 }
 
 .scanCount {
-  font-family: var(--font-hud);
-  font-size: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--text-muted);
@@ -209,15 +216,15 @@
 .clearBtn {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 5px 10px;
+  gap: 6px;
+  padding: 6px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--border);
   background: transparent;
   color: var(--text-muted);
   font-family: var(--font-hud);
-  font-size: 9px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   letter-spacing: 0.08em;
   cursor: pointer;
   margin-left: auto;
@@ -225,8 +232,8 @@
 }
 
 .clearBtn:hover {
-  border-color: rgba(255,255,255,0.15);
-  color: var(--text-secondary);
+  border-color: var(--cyan);
+  color: var(--cyan);
 }
 
 /* ─────────────────────────────────────────────────────────────────────── */
@@ -236,7 +243,7 @@
   position: relative;
   width: 100%;
   height: 100%;
-  background: #020408;
+  background: #0E1117;
   border-radius: var(--radius-md);
   overflow: hidden;
 }
@@ -256,7 +263,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #020408 0%, #050a10 100%);
+  background: linear-gradient(135deg, #0E1117 0%, #161B26 100%);
 }
 
 .noise {
@@ -280,34 +287,34 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   font-family: var(--font-hud);
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 700;
   letter-spacing: 0.15em;
-  color: rgba(0,212,255,0.4);
+  color: var(--cyan);
 }
 
 .noSigSub {
-  font-size: 9px;
-  font-weight: 400;
-  color: rgba(0,212,255,0.2);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
   letter-spacing: 0.1em;
 }
 
 .spinner {
-  width: 24px; height: 24px;
-  border: 2px solid rgba(0,212,255,0.15);
-  border-top-color: rgba(0,212,255,0.7);
+  width: 28px; height: 28px;
+  border: 2px solid rgba(0, 240, 255, 0.15);
+  border-top-color: #00F0FF;
   border-radius: 50%;
   animation: spin 1s linear infinite;
 }
 
 .terrainDot {
   position: absolute;
-  width: 3px; height: 3px;
+  width: 4px; height: 4px;
   border-radius: 50%;
-  background: rgba(0,212,255,0.25);
+  background: rgba(0, 240, 255, 0.25);
   animation: terrainPulse 2s ease-in-out infinite;
 }
 
@@ -321,7 +328,7 @@
   position: absolute;
   left: 0; right: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.6), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0, 240, 255, 0.6), transparent);
   animation: scanDown 3s linear infinite;
   pointer-events: none;
 }
@@ -334,8 +341,8 @@
 /* Corner brackets */
 .corner {
   position: absolute;
-  width: 20px; height: 20px;
-  border-color: rgba(0,212,255,0.5);
+  width: 22px; height: 22px;
+  border-color: rgba(0, 240, 255, 0.4);
   border-style: solid;
 }
 .tl { top:10px; left:10px;   border-width: 1.5px 0 0 1.5px; }
@@ -356,11 +363,46 @@
   position: absolute;
   inset: 0;
   background-image:
-    linear-gradient(rgba(0,212,255,0.025) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(0,212,255,0.025) 1px, transparent 1px);
+    linear-gradient(rgba(0, 240, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 240, 255, 0.02) 1px, transparent 1px);
   background-size: 40px 40px;
   pointer-events: none;
 }
+
+/* 2x2 Grid Divider Overlay (11px - 12px Space Grotesk) */
+.viewportGridOverlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.gridLineH {
+  position: absolute;
+  top: 50%; left: 0; right: 0;
+  height: 1px;
+  border-top: 1px dashed rgba(0, 240, 255, 0.2);
+  transform: translateY(-50%);
+}
+.gridLineV {
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 1px;
+  border-left: 1px dashed rgba(0, 240, 255, 0.2);
+  transform: translateX(-50%);
+}
+.gridLabel {
+  position: absolute;
+  font-family: var(--font-hud);
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(0, 240, 255, 0.5);
+  letter-spacing: 0.06em;
+  padding: 6px;
+}
+.glTl { top: 35px; left: 12px; }
+.glTr { top: 35px; right: 12px; }
+.glBl { bottom: 35px; left: 12px; }
+.glBr { bottom: 35px; right: 12px; }
 
 /* Top HUD */
 .topHud {
@@ -368,20 +410,20 @@
   top: 0; left: 0; right: 0;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  background: linear-gradient(180deg, rgba(2,4,8,0.85) 0%, transparent 100%);
+  gap: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(180deg, rgba(14, 17, 23, 0.9) 0%, transparent 100%);
 }
 
 .hudChip {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .hudLabel {
   font-family: var(--font-hud);
-  font-size: 7px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--text-muted);
@@ -389,16 +431,17 @@
 
 .hudValue {
   font-family: var(--font-hud);
-  font-size: 9px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.06em;
-  color: #00d4ff;
+  color: #00F0FF;
 }
 
 .recDot {
-  width: 5px; height: 5px;
+  width: 6px; height: 6px;
   border-radius: 50%;
-  background: #ef4444;
+  background: #FF2D95;
+  box-shadow: 0 0 8px rgba(255, 45, 149, 0.5);
   animation: pulseDot 1.2s ease-in-out infinite;
 }
 
@@ -410,26 +453,26 @@
 .spacer { flex: 1; }
 
 .fsBtn {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: #1C222E;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  padding: 4px;
+  padding: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   transition: all 0.2s;
 }
 .fsBtn:hover {
-  border-color: rgba(0,212,255,0.3);
-  background: rgba(0,212,255,0.06);
+  border-color: var(--cyan);
+  background: rgba(0, 240, 255, 0.1);
 }
 
 /* Bottom HUD */
 .bottomHud {
   position: absolute;
   bottom: 0; left: 0; right: 0;
-  padding: 20px 12px 10px;
-  background: linear-gradient(0deg, rgba(2,4,8,0.9) 0%, transparent 100%);
+  padding: 20px 14px 12px;
+  background: linear-gradient(0deg, rgba(14, 17, 23, 0.9) 0%, transparent 100%);
 }
 
 .hudTelRow {
@@ -441,18 +484,18 @@
 .telBlock {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .hudBigVal {
-  font-family: var(--font-hud);
-  font-size: 14px;
+  font-family: var(--font-mono);
+  font-size: 15px;
   font-weight: 800;
-  color: #e2e8f0;
+  color: #FFFFFF;
 }
 
 .hudUnit {
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--text-muted);
   margin-left: 2px;
@@ -461,29 +504,29 @@
 .gpsTel {
   flex-direction: row;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
 }
 
 .gpsVal {
-  font-family: var(--font-hud);
-  font-size: 9px;
-  font-weight: 600;
-  color: #a855f7;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--cyan);
 }
 
 /* RTSP panel */
 .rtspPanel {
   position: absolute;
-  top: 48px;
-  right: 8px;
+  top: 52px;
+  right: 12px;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  background: rgba(5,8,16,0.95);
-  border: 1px solid rgba(0,212,255,0.25);
+  gap: 8px;
+  padding: 8px 12px;
+  background: #161B26;
+  border: 1px solid var(--cyan);
   border-radius: 8px;
-  backdrop-filter: blur(16px);
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.2);
   animation: slideDown 0.2s ease forwards;
   z-index: 10;
 }
@@ -494,38 +537,42 @@
 }
 
 .rtspInput {
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: #1C222E;
+  border: 1px solid var(--border);
   border-radius: 5px;
-  padding: 4px 8px;
+  padding: 6px 10px;
   color: var(--text-primary);
   font-family: var(--font-body);
-  font-size: 11px;
-  width: 220px;
+  font-size: 12px;
+  width: 240px;
   outline: none;
 }
 
 .rtspInput:focus {
-  border-color: rgba(0,212,255,0.4);
+  border-color: var(--cyan);
 }
 
+/* Primary Button Rule for rtspConnect */
 .rtspConnect {
-  padding: 4px 10px;
-  background: rgba(0,212,255,0.1);
-  border: 1px solid rgba(0,212,255,0.3);
+  padding: 6px 14px;
+  background: #00F0FF;
+  border: 1px solid #00F0FF;
   border-radius: 5px;
-  color: #00d4ff;
+  color: #0E1117;
   font-family: var(--font-hud);
-  font-size: 8px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   cursor: pointer;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.35);
   transition: all 0.2s;
   white-space: nowrap;
 }
 
 .rtspConnect:hover {
-  background: rgba(0,212,255,0.18);
+  background: #33F3FF;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.5);
+  color: #0E1117;
 }
 
 /* Live result badge — floats above bottom HUD */
@@ -536,16 +583,17 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 14px;
-  background: rgba(5,8,16,0.9);
-  border: 1px solid rgba(0,212,255,0.25);
+  gap: 8px;
+  padding: 6px 16px;
+  background: #1C222E;
+  border: 1px solid var(--cyan);
   border-radius: 20px;
   font-family: var(--font-hud);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: #00d4ff;
+  color: #00F0FF;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.25);
   backdrop-filter: blur(8px);
   white-space: nowrap;
   animation: slideUp 0.3s cubic-bezier(.16,1,.3,1) forwards;
@@ -554,6 +602,7 @@
 
 /* Active state for HUD buttons (AI scan toggle) */
 .fsBtnActive {
-  border-color: rgba(34,197,94,0.4) !important;
-  background: rgba(34,197,94,0.1) !important;
+  border-color: var(--cyan) !important;
+  background: #222A38 !important;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.3) !important;
 }

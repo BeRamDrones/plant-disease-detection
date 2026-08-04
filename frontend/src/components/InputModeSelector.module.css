@@ -1,10 +1,10 @@
 .wrap {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   padding: 4px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
+  background: #1C222E;
+  border: 1px solid var(--border);
   border-radius: 10px;
   position: relative;
 }
@@ -12,8 +12,8 @@
 .tab {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  gap: 8px;
+  padding: 8px 16px;
   border-radius: 7px;
   border: 1px solid transparent;
   background: transparent;
@@ -21,7 +21,7 @@
   cursor: pointer;
   transition: all 0.2s ease;
   font-family: var(--font-hud);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   position: relative;
@@ -30,19 +30,21 @@
 
 .tab:hover:not(.disabled):not(.active) {
   color: var(--text-secondary);
-  background: rgba(255,255,255,0.04);
-  border-color: rgba(255,255,255,0.06);
+  background: #222A38;
+  border-color: rgba(0, 240, 255, 0.2);
 }
 
 .tab.active {
-  background: rgba(0,212,255,0.1);
-  border-color: rgba(0,212,255,0.3);
-  color: #00d4ff;
-  box-shadow: 0 0 12px rgba(0,212,255,0.08), inset 0 1px 0 rgba(255,255,255,0.05);
+  background: #222A38;
+  border-color: var(--cyan);
+  color: var(--cyan);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
+  font-size: 11px;
+  font-weight: 700;
 }
 
 .tab.disabled {
-  opacity: 0.35;
+  opacity: 0.28;
   cursor: not-allowed;
 }
 
@@ -58,12 +60,12 @@
 /* Pulse dot on active tab */
 .activeDot {
   position: absolute;
-  top: 5px;
-  right: 5px;
-  width: 5px;
-  height: 5px;
+  top: 6px;
+  right: 6px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: #00d4ff;
+  background: var(--cyan);
   animation: pulseDot 2s ease-in-out infinite;
 }
 
@@ -75,13 +77,13 @@
 /* Lock badge */
 .lockBadge {
   font-family: var(--font-hud);
-  font-size: 8px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
-  color: #f59e0b;
+  color: #00F0FF;
   padding: 3px 10px;
-  background: rgba(245,158,11,0.08);
-  border: 1px solid rgba(245,158,11,0.2);
+  background: #3B82F6;
+  border: 1px solid rgba(0, 240, 255, 0.4);
   border-radius: 20px;
   margin-left: 6px;
   animation: lockPulse 2s ease-in-out infinite;

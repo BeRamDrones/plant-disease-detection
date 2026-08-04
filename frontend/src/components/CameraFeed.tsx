@@ -14,8 +14,6 @@ const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const LIVE_CAPTURE_INTERVAL = 4000;
 
 interface Props {
-  altitude: number;
-  speed: number;
   lat: number;
   lon: number;
   mode: InputMode;
@@ -296,9 +294,9 @@ function VideoMode({
 // LIVE UAV MODE
 // ─────────────────────────────────────────────────────────────────────────────
 function LiveUAVMode({
-  altitude, speed, lat, lon, modelReady, onDetections, onCameraActive, scanInterval = 1,
+  lat, lon, modelReady, onDetections, onCameraActive, scanInterval = 1,
 }: {
-  altitude: number; speed: number; lat: number; lon: number;
+  lat: number; lon: number;
   modelReady: boolean;
   onDetections: (raws: RawDetection[]) => void;
   onCameraActive?: (active: boolean) => void;
@@ -453,18 +451,18 @@ function LiveUAVMode({
             )}
             {camStatus === "closed" && (
               <>
-                <VideoOff size={40} color="rgba(239,68,68,0.4)" />
-                <span style={{ color: "#ef4444", letterSpacing: "0.15em" }}>CAMERA IS CLOSED</span>
+                <VideoOff size={40} color="rgba(255,45,149,0.4)" />
+                <span style={{ color: "#FF2D95", letterSpacing: "0.15em" }}>CAMERA IS CLOSED</span>
                 <span className={styles.noSigSub}>UAV drone survey stream feed is shut down</span>
-                <span className={styles.noSigSub} style={{ color: "rgba(239,68,68,0.3)" }}>AI detection is paused — reopen camera to resume</span>
+                <span className={styles.noSigSub} style={{ color: "rgba(255,45,149,0.3)" }}>AI detection is paused — reopen camera to resume</span>
               </>
             )}
             {camStatus === "unavailable" && (
               <>
-                <VideoOff size={40} color="rgba(245,158,11,0.4)" />
-                <span style={{ color: "#f59e0b", letterSpacing: "0.15em" }}>NO CAMERA DETECTED</span>
+                <VideoOff size={40} color="rgba(91,33,168,0.5)" />
+                <span style={{ color: "#5B21A8", letterSpacing: "0.15em" }}>NO CAMERA DETECTED</span>
                 <span className={styles.noSigSub}>No camera hardware or permission was found</span>
-                <span className={styles.noSigSub} style={{ color: "rgba(245,158,11,0.25)" }}>Allow camera access in your browser to begin detection</span>
+                <span className={styles.noSigSub} style={{ color: "rgba(91,33,168,0.4)" }}>Allow camera access in your browser to begin detection</span>
               </>
             )}
           </div>
@@ -482,7 +480,7 @@ function LiveUAVMode({
       {/* RTSP panel */}
       {showRtsp && (
         <div className={styles.rtspPanel}>
-          <Link2 size={12} color="#00d4ff" />
+          <Link2 size={12} color="#00F0FF" />
           <input
             className={styles.rtspInput}
             placeholder="rtsp://drone-ip:554/stream"
@@ -496,7 +494,7 @@ function LiveUAVMode({
       {/* Last detection result badge — only shown when camera is active */}
       {lastResult && cameraIsLive && (
         <div className={styles.liveResultBadge}>
-          <Zap size={9} color="#00d4ff" />
+          <Zap size={9} color="#00F0FF" />
           {lastResult}
         </div>
       )}
@@ -513,7 +511,7 @@ function LiveUAVMode({
       {/* Center crosshair — only when live */}
       {cameraIsLive && (
         <div className={styles.crosshair}>
-          <Crosshair size={32} color="rgba(0,212,255,0.5)" strokeWidth={0.8} />
+          <Crosshair size={32} color="rgba(0,240,255,0.5)" strokeWidth={0.8} />
         </div>
       )}
 
@@ -521,14 +519,14 @@ function LiveUAVMode({
       <div className={styles.topHud}>
         <div className={styles.hudChip}>
           <span className={styles.hudLabel}>REC</span>
-          <span className={styles.recDot} style={{ background: cameraIsLive ? "#ef4444" : "#475569", animationPlayState: cameraIsLive ? "running" : "paused" }} />
+          <span className={styles.recDot} style={{ background: cameraIsLive ? "#FF2D95" : "#475569", animationPlayState: cameraIsLive ? "running" : "paused" }} />
         </div>
         <div className={styles.hudChip}>
           <span className={styles.hudLabel}>CAM</span>
           <span
             className={styles.hudValue}
             style={{
-              color: cameraIsLive ? "#10b981" : camStatus === "unavailable" ? "#f59e0b" : "#ef4444"
+              color: cameraIsLive ? "#00F0FF" : camStatus === "unavailable" ? "#5B21A8" : "#FF2D95"
             }}
           >
             {cameraIsLive ? "LIVE" : camStatus === "closed" ? "CLOSED" : camStatus === "unavailable" ? "NO CAMERA" : "CONNECTING"}
@@ -536,7 +534,7 @@ function LiveUAVMode({
         </div>
         <div className={styles.hudChip}>
           <span className={styles.hudLabel}>AI</span>
-          <span className={styles.hudValue} style={{ color: autoCapture && cameraIsLive ? "#22c55e" : "#94a3b8" }}>
+          <span className={styles.hudValue} style={{ color: autoCapture && cameraIsLive ? "#00F0FF" : "rgba(255,255,255,0.45)" }}>
             {autoCapture && cameraIsLive ? "SCANNING" : cameraIsLive ? "IDLE" : "PAUSED"}
           </span>
         </div>
@@ -549,19 +547,19 @@ function LiveUAVMode({
             onClick={toggleAutoCapture}
             title={autoCapture ? "Stop AI frame capture" : "Start AI frame capture"}
           >
-            <Zap size={13} color={autoCapture ? "#22c55e" : "#94a3b8"} />
+            <Zap size={13} color={autoCapture ? "#00F0FF" : "rgba(255,255,255,0.45)"} />
           </button>
         )}
 
         {/* Manual capture — only when camera is live */}
         {modelReady && cameraIsLive && (
           <button className={styles.fsBtn} onClick={captureFrame} title="Capture & analyse frame now">
-            <Camera size={13} color="#00d4ff" />
+            <Camera size={13} color="#00F0FF" />
           </button>
         )}
 
         <button className={styles.fsBtn} onClick={() => setShowRtsp(v => !v)} title="RTSP URL">
-          <Link2 size={13} color="#94a3b8" />
+          <Link2 size={13} color="rgba(255,255,255,0.45)" />
         </button>
 
         {/* Camera Power Toggle */}
@@ -570,41 +568,29 @@ function LiveUAVMode({
           onClick={() => setCamOn(v => !v)}
           title={camOn ? "Close Camera Stream" : "Open Camera Stream"}
           style={{
-            borderColor: !camOn ? "rgba(239,68,68,0.3)" : undefined,
-            background:  !camOn ? "rgba(239,68,68,0.06)" : undefined
+            borderColor: !camOn ? "rgba(255,45,149,0.3)" : undefined,
+            background:  !camOn ? "rgba(255,45,149,0.06)" : undefined
           }}
         >
           {camOn && cameraIsLive ? (
-            <Video size={13} color="#10b981" />
+            <Video size={13} color="#00F0FF" />
           ) : (
-            <VideoOff size={13} color="#ef4444" />
+            <VideoOff size={13} color="#FF2D95" />
           )}
         </button>
 
         <button className={styles.fsBtn} onClick={toggleFullscreen} title="Fullscreen">
-          <Maximize2 size={13} color="#94a3b8" />
+          <Maximize2 size={13} color="rgba(255,255,255,0.45)" />
         </button>
       </div>
 
       {/* Bottom HUD telemetry */}
       <div className={styles.bottomHud}>
         <div className={styles.hudTelRow}>
-          <div className={styles.telBlock}>
-            <span className={styles.hudLabel}>ALT</span>
-            <span className={styles.hudBigVal}>{altitude.toFixed(1)}<span className={styles.hudUnit}>m</span></span>
-          </div>
-          <div className={styles.telBlock}>
-            <span className={styles.hudLabel}>SPD</span>
-            <span className={styles.hudBigVal}>{speed.toFixed(1)}<span className={styles.hudUnit}>m/s</span></span>
-          </div>
           <div className={`${styles.telBlock} ${styles.gpsTel}`}>
-            <MapPin size={10} color="#a855f7" />
+            <MapPin size={10} color="#00F0FF" />
             <span className={styles.hudLabel}>GPS</span>
             <span className={styles.gpsVal}>{lat.toFixed(4)}°N &nbsp;{lon.toFixed(4)}°E</span>
-          </div>
-          <div className={styles.telBlock}>
-            <span className={styles.hudLabel}>HEADING</span>
-            <span className={styles.hudBigVal}>247°<span className={styles.hudUnit}>SW</span></span>
           </div>
         </div>
       </div>
@@ -617,7 +603,7 @@ function LiveUAVMode({
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
-export default function CameraFeed({ altitude, speed, lat, lon, mode, modelReady, onDetections, onCameraActive, scanInterval }: Props) {
+export default function CameraFeed({ lat, lon, mode, modelReady, onDetections, onCameraActive, scanInterval }: Props) {
   return (
     <div className={styles.container}>
       {mode === "image" && (
@@ -628,13 +614,23 @@ export default function CameraFeed({ altitude, speed, lat, lon, mode, modelReady
       )}
       {mode === "live" && (
         <LiveUAVMode
-          altitude={altitude} speed={speed} lat={lat} lon={lon}
+          lat={lat} lon={lon}
           modelReady={modelReady}
           onDetections={onDetections}
           onCameraActive={onCameraActive}
           scanInterval={scanInterval}
         />
       )}
+
+      {/* 2x2 Grid divider overlay */}
+      <div className={styles.viewportGridOverlay}>
+        <div className={styles.gridLineH} />
+        <div className={styles.gridLineV} />
+        <span className={`${styles.gridLabel} ${styles.glTl}`}>TL / ZONE A1</span>
+        <span className={`${styles.gridLabel} ${styles.glTr}`}>TR / ZONE A2</span>
+        <span className={`${styles.gridLabel} ${styles.glBl}`}>BL / ZONE C1</span>
+        <span className={`${styles.gridLabel} ${styles.glBr}`}>BR / ZONE C2</span>
+      </div>
     </div>
   );
 }

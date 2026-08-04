@@ -1,12 +1,11 @@
 .wrap {
-  background: var(--bg-glass);
-  backdrop-filter: blur(16px);
-  border: 1px solid var(--border-cyan);
+  background: #161B26;
+  border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 12px;
+  padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   min-height: 210px;
 }
 
@@ -16,32 +15,32 @@
   align-items: center;
   justify-content: space-between;
 }
-.hdrLeft { display: flex; align-items: center; gap: 6px; }
+.hdrLeft { display: flex; align-items: center; gap: 8px; }
 .hdrRight { display: flex; align-items: center; }
 
 .title {
   font-family: var(--font-hud);
-  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.12em;
   color: var(--cyan);
 }
 .scanBadge {
   font-family: var(--font-hud);
-  font-size: 8px; font-weight: 700; letter-spacing: 0.1em;
-  color: #f59e0b;
-  background: rgba(245,158,11,0.1);
-  border: 1px solid rgba(245,158,11,0.3);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+  color: #00F0FF;
+  background: #3B82F6;
+  border: 1px solid rgba(0, 240, 255, 0.4);
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 2px 8px;
   animation: badgePulse 1.2s ease-in-out infinite;
 }
 .activeBadge {
   font-family: var(--font-hud);
-  font-size: 8px; font-weight: 700; letter-spacing: 0.08em;
-  color: #00d4ff;
-  background: rgba(0,212,255,0.1);
-  border: 1px solid rgba(0,212,255,0.25);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em;
+  color: #00F0FF;
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.3);
   border-radius: 4px;
-  padding: 1px 6px;
+  padding: 2px 8px;
 }
 
 @keyframes badgePulse {
@@ -53,19 +52,20 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 8px;
+  gap: 10px;
   flex: 1;
 }
 
 /* ── Cell ── */
 .cell {
   border-radius: 6px;
-  border: 1px solid;
-  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: #1C222E;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
-  gap: 6px;
+  gap: 8px;
   position: relative;
   overflow: hidden;
   transition: all 0.35s ease;
@@ -92,52 +92,54 @@
 
 .cellLabel {
   font-family: var(--font-hud);
-  font-size: 10px; font-weight: 800; letter-spacing: 0.08em;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.08em;
+  color: #FFFFFF;
 }
 
 .formedBadge {
   font-family: var(--font-hud);
-  font-size: 7px; font-weight: 700; letter-spacing: 0.06em;
-  color: #10b981;
-  background: rgba(16,185,129,0.12);
-  border: 1px solid rgba(16,185,129,0.3);
+  font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
+  color: #00F0FF;
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.3);
   border-radius: 3px;
-  padding: 1px 4px;
+  padding: 2px 5px;
 }
 
 .cellBody {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
 }
 
 .classText {
   font-family: var(--font-hud);
-  font-size: 11px; font-weight: 800; letter-spacing: 0.05em;
+  font-size: 12px; font-weight: 800; letter-spacing: 0.05em;
   line-height: 1.2;
 }
 
 .countBadge {
-  font-family: var(--font-hud);
-  font-size: 8px; font-weight: 700; letter-spacing: 0.06em;
+  font-family: var(--font-mono);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
   border: 1px solid;
   border-radius: 3px;
-  padding: 1px 5px;
+  padding: 2px 6px;
   width: fit-content;
 }
 
 .confBar {
-  height: 2px;
-  border-radius: 1px;
-  background: rgba(255,255,255,0.06);
+  height: 4px;
+  border-radius: 2px;
+  background: #222A38;
   overflow: hidden;
 }
 
 .confFill {
   height: 100%;
-  border-radius: 1px;
+  border-radius: 2px;
   transition: width 0.4s ease;
-  opacity: 0.8;
+  opacity: 0.95;
+  background: linear-gradient(90deg, #00F0FF 0%, #3B82F6 100%);
 }
 
 /* ── Empty state (no runtime zones formed yet) ── */
@@ -147,11 +149,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 16px 12px;
+  padding: 18px 14px;
   text-align: center;
-  gap: 6px;
-  background: rgba(0,212,255,0.02);
-  border: 1px dashed rgba(0,212,255,0.15);
+  gap: 8px;
+  background: #0E1117;
+  border: 1px dashed var(--border);
   border-radius: 6px;
 }
 
@@ -165,24 +167,26 @@
 
 .radarSpin {
   animation: spin 3s linear infinite;
+  color: #00F0FF;
 }
 
 .radarPulse {
   position: absolute;
   inset: -6px;
   border-radius: 50%;
-  border: 1px solid rgba(0,212,255,0.3);
+  border: 1px solid rgba(0, 240, 255, 0.3);
   animation: pulse-dot 1.8s ease-in-out infinite;
 }
 
 .emptyTitle {
   font-family: var(--font-hud);
-  font-size: 10px; font-weight: 700; letter-spacing: 0.12em;
-  color: #f59e0b;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.12em;
+  color: #00F0FF;
 }
 
 .emptySub {
-  font-size: 9.5px;
+  font-family: var(--font-body);
+  font-size: 11px;
   color: var(--text-muted);
   max-width: 280px;
   line-height: 1.4;
@@ -198,16 +202,17 @@
 
 .footerEmpty {
   font-family: var(--font-hud);
-  font-size: 8px; font-weight: 500; letter-spacing: 0.08em;
-  color: #334155;
+  font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+  color: var(--text-muted);
 }
 
 .footStat {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 .footStat span {
   font-family: var(--font-hud);
-  font-size: 8.5px; font-weight: 600; letter-spacing: 0.06em;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.06em;
+  color: var(--text-secondary);
 }

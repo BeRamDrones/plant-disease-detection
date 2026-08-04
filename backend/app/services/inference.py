@@ -179,6 +179,7 @@ class DiseaseDetectionPipeline:
         return self._registry.is_ready
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
     def run_inference(self, image_path: str) -> List[Dict[str, Any]]:
         """
         Gate: returns [] if model is not ready, preventing ghost detections.
@@ -189,6 +190,47 @@ class DiseaseDetectionPipeline:
 
         if self._registry._mock_mode or self._registry._model is None:
             return self._mock_results(image_path)
+
+        task = self._registry.model_task
+        if task == "classify":
+            # Grid/Tiled classification!
+            # Crop image into 4 quadrants (2x2 grid) and classify each individually
+            try:
+                from PIL import Image
+                img = Image.open(image_path)
+                width, height = img.size
+
+                quadrants = [
+                    ("Top-Left",     (0,          0,           width // 2,  height // 2), 0.25, 0.25),
+                    ("Top-Right",    (width // 2, 0,           width,       height // 2), 0.75, 0.25),
+                    ("Bottom-Left",  (0,          height // 2, width // 2,  height),      0.25, 0.75),
+                    ("Bottom-Right", (width // 2, height // 2, width,       height),      0.75, 0.75),
+                ]
+
+                all_detections = []
+                for label, box, rel_x, rel_y in quadrants:
+                    cropped = img.crop(box)
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_quad:
+                        cropped.save(tmp_quad.name, "JPEG")
+                        quad_path = tmp_quad.name
+
+                    try:
+                        quad_dets = self._real_inference(quad_path)
+                        for det in quad_dets:
+                            det["x_center"] = rel_x
+                            det["y_center"] = rel_y
+                            det["grid_zone"] = label
+                        all_detections.extend(quad_dets)
+                    except Exception as quad_err:
+                        logger.error(f"[Pipeline] Quadrant {label} inference failed: {quad_err}")
+                    finally:
+                        if os.path.exists(quad_path):
+                            os.unlink(quad_path)
+
+                return all_detections
+            except Exception as e:
+                logger.error(f"[Pipeline] Grid crop inference failed: {e}", exc_info=True)
+                return self._real_inference(image_path)
 
         return self._real_inference(image_path)
 
@@ -201,16 +243,28 @@ class DiseaseDetectionPipeline:
             "healthy", "powdery_mildew", "rust", "blight",
             "leaf_spot", "mosaic_virus", "anthracnose", "downy_mildew",
         ]
-        return [
-            {
+        
+        # Return mock detections in different grid zones!
+        quads = [
+            ("Top-Left", 0.25, 0.25),
+            ("Top-Right", 0.75, 0.25),
+            ("Bottom-Left", 0.25, 0.75),
+            ("Bottom-Right", 0.75, 0.75),
+        ]
+        
+        detections = []
+        selected_quads = random.sample(quads, k=random.randint(1, 3))
+        for label, rel_x, rel_y in selected_quads:
+            detections.append({
                 "detected_class":   random.choice(diseases),
                 "confidence_score": round(0.70 + random.random() * 0.28, 4),
-                "x_center":        round(random.random(), 4),
-                "y_center":        round(random.random(), 4),
+                "x_center":        rel_x,
+                "y_center":        rel_y,
+                "grid_zone":       label,
                 "plant_class":     "mock",
                 "model_name":      "best.pt (mock)",
-            }
-        ]
+            })
+        return detections
 
     # ------------------------------------------------------------------
     def _real_inference(self, image_path: str) -> List[Dict[str, Any]]:

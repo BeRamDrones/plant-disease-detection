@@ -14,6 +14,7 @@ export interface RawDetection {
   plant_class?: string;
   model_name?: string;
   rank?: number;        // classification rank: 1 = top prediction
+  grid_zone?: string;
 }
 
 let _counter = 1;
@@ -42,6 +43,7 @@ function mapDetection(raw: RawDetection, droneLat: number, droneLon: number): De
     model_version: raw.model_name ?? "best.pt",
     detected_at: new Date().toISOString(),
     rank:         raw.rank,
+    grid_zone:    raw.grid_zone,
   };
 }
 

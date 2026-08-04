@@ -11,6 +11,7 @@ export interface Detection {
   model_version: string;
   detected_at: string;
   rank?: number;        // classify model rank: 1 = top prediction, 2 = 2nd, etc.
+  grid_zone?: string;   // image quadrant: Top-Left, Top-Right, etc.
 }
 
 export interface ZoneSummary {
@@ -38,16 +39,16 @@ export interface MissionSummary {
 }
 
 export const DISEASE_COLORS: Record<string, string> = {
-  healthy:         "#22c55e",
-  powdery_mildew:  "#f59e0b",
-  rust:            "#ef4444",
-  blight:          "#ef4444",
-  leaf_spot:       "#f97316",
-  mosaic_virus:    "#a855f7",
-  bacterial_wilt:  "#ef4444",
-  anthracnose:     "#f97316",
-  downy_mildew:    "#eab308",
-  unknown:         "#94a3b8",
+  healthy:         "#00F0FF",
+  powdery_mildew:  "#3B82F6",
+  rust:            "#FF2D95",
+  blight:          "#FF2D95",
+  leaf_spot:       "#3B82F6",
+  mosaic_virus:    "#3B82F6",
+  bacterial_wilt:  "#FF2D95",
+  anthracnose:     "#3B82F6",
+  downy_mildew:    "#3B82F6",
+  unknown:         "rgba(255,255,255,0.45)",
 };
 
 // Plant classes from parent model (best.pt)
@@ -64,7 +65,7 @@ export function diseaseColor(cls: string): string {
   const norm = cls.toLowerCase().replace(/_/g, "");
   if (norm === "healthy") return DISEASE_COLORS.healthy;
   if (CROP_CLASSES.has(norm)) {
-    return norm === "notaleaf" ? "#ef4444" : "#00d4ff"; // Cyan for crops, Red for NotALeaf
+    return norm === "notaleaf" ? "#FF2D95" : "#00F0FF"; // Cyan for crops, Pink for NotALeaf alert
   }
   
   // Find key in DISEASE_COLORS by normalized name

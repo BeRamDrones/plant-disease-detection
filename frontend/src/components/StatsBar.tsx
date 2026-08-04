@@ -39,15 +39,15 @@ export default function StatsBar({ detections, zones, healthScore, inputMode, mo
   );
   const dominant   = Object.keys(classMap)[0] ?? "—";
   const zonesActive = zones.filter(z => z.detection_count > 0).length;
-  const hsColor    = healthScore >= 70 ? "#22c55e" : healthScore >= 40 ? "#f59e0b" : "#ef4444";
+  const hsColor    = healthScore >= 70 ? "#00F0FF" : healthScore >= 40 ? "#3B82F6" : "#FF2D95";
   const modelColor = modelStatus.ready
-    ? (modelStatus.mock_mode ? "#f59e0b" : "#22c55e")
-    : "#f59e0b";
+    ? (modelStatus.mock_mode ? "#3B82F6" : "#00F0FF")
+    : "#FF2D95";
 
   const stats = [
-    { icon: <Activity size={16} color="#00d4ff"/>,       label: "TOTAL DETECTIONS", value: detections.length.toString(), color: "#00d4ff"  },
-    { icon: <AlertTriangle size={16} color="#ef4444"/>,  label: "DISEASED ALERTS",  value: diseased.length.toString(),   color: "#ef4444"  },
-    { icon: <Layers size={16} color="#a855f7"/>,         label: "ZONES ACTIVE",     value: `${zonesActive} / ${zones.length}`, color: "#a855f7" },
+    { icon: <Activity size={16} color="#00F0FF"/>,       label: "TOTAL DETECTIONS", value: detections.length.toString(), color: "#00F0FF"  },
+    { icon: <AlertTriangle size={16} color="#FF2D95"/>,  label: "DISEASED ALERTS",  value: diseased.length.toString(),   color: "#FF2D95"  },
+    { icon: <Layers size={16} color="#3B82F6"/>,         label: "ZONES ACTIVE",     value: `${zonesActive} / ${zones.length}`, color: "#3B82F6" },
     { icon: <Shield size={16} color={hsColor}/>,         label: "HEALTH SCORE",     value: `${healthScore.toFixed(1)}%`, color: hsColor    },
   ];
 
@@ -70,7 +70,7 @@ export default function StatsBar({ detections, zones, healthScore, inputMode, mo
       <div className={styles.statBlock}>
         <div className={styles.statContent}>
           <span className={styles.statLabel}>DOMINANT DISEASE</span>
-          <span className={styles.statValue} style={{ color:"#f59e0b", fontSize:"11px" }}>
+          <span className={styles.statValue} style={{ color:"#3B82F6", fontSize:"11px" }}>
             {dominant.replace(/_/g," ").toUpperCase()}
           </span>
         </div>
@@ -80,10 +80,10 @@ export default function StatsBar({ detections, zones, healthScore, inputMode, mo
 
       {/* Input mode indicator */}
       <div className={styles.statBlock} style={{ flex: "none", paddingRight: 0 }}>
-        <span style={{ color: "#00d4ff" }}>{MODE_ICONS[inputMode]}</span>
+        <span style={{ color: "#00F0FF" }}>{MODE_ICONS[inputMode]}</span>
         <div className={styles.statContent}>
           <span className={styles.statLabel}>INPUT MODE</span>
-          <span className={styles.statValue} style={{ color: "#00d4ff", fontSize: "11px" }}>
+          <span className={styles.statValue} style={{ color: "#00F0FF", fontSize: "11px" }}>
             {MODE_LABELS[inputMode]}
           </span>
         </div>

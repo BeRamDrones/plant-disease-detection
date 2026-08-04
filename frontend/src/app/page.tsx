@@ -144,8 +144,6 @@ export default function MissionDashboard() {
         signalStrength={Math.round(sig)}
         battery={Math.round(bat)}
         modelStatus={modelStatus}
-        altitude={alt}
-        speed={speed}
       />
 
       {/* ── Main layout ── */}
@@ -191,15 +189,15 @@ export default function MissionDashboard() {
                     />
                     <div className={styles.ctrlGroup}>
                       <div className={styles.detChips}>
-                        <span className={styles.chip} style={{ color:"#00d4ff", borderColor:"rgba(0,212,255,0.25)", background:"rgba(0,212,255,0.05)" }}>
+                        <span className={styles.chip} style={{ color:"#00F0FF", borderColor:"rgba(0,240,255,0.3)", background:"rgba(0,240,255,0.1)" }}>
                           {detections.length} CROPS CLASSIFIED
                         </span>
                         {totalScans > 0 && (
-                          <span className={styles.chip} style={{ color:"#8b5cf6", borderColor:"rgba(139,92,246,0.25)", background:"rgba(139,92,246,0.05)" }}>
+                          <span className={styles.chip} style={{ color:"#3B82F6", borderColor:"rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.12)" }}>
                             {totalScans} SCANS
                           </span>
                         )}
-                        <span className={styles.chip} style={{ color:"#f59e0b", borderColor:"rgba(245,158,11,0.25)", background:"rgba(245,158,11,0.05)" }} title="Parent model classifies crop species; child disease specialist models standby">
+                        <span className={styles.chip} style={{ color:"#3B82F6", borderColor:"rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.12)" }} title="Parent model classifies crop species; child disease specialist models standby">
                           CHILD MODELS: STANDBY
                         </span>
                       </div>
@@ -217,8 +215,6 @@ export default function MissionDashboard() {
                   </div>
                   <div className={styles.feedWrap}>
                     <CameraFeed
-                      altitude={alt}
-                      speed={speed}
                       lat={lat}
                       lon={lon}
                       mode={inputMode}
@@ -240,7 +236,7 @@ export default function MissionDashboard() {
                     <div className={styles.healthHeader}>
                       <span className={styles.healthLabel}>MISSION HEALTH SCORE</span>
                       <span className={styles.healthPct} style={{
-                        color: summary.health_score >= 70 ? "#10b981" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444"
+                        color: summary.health_score >= 70 ? "#00F0FF" : summary.health_score >= 40 ? "#3B82F6" : "#FF2D95"
                       }}>
                         {summary.health_score.toFixed(1)}%
                       </span>
@@ -248,7 +244,7 @@ export default function MissionDashboard() {
                     <div className={styles.healthBar}>
                       <div className={styles.healthFill} style={{
                         width: `${summary.health_score}%`,
-                        background: summary.health_score >= 70 ? "#10b981" : summary.health_score >= 40 ? "#f59e0b" : "#ef4444",
+                        background: summary.health_score >= 70 ? "#00F0FF" : summary.health_score >= 40 ? "#3B82F6" : "#FF2D95",
                       }}/>
                       <div className={styles.healthShimmer}/>
                     </div>
@@ -285,8 +281,6 @@ export default function MissionDashboard() {
                 <div className={styles.mainCol}>
                   <div className={styles.feedWrap}>
                     <CameraFeed
-                      altitude={alt}
-                      speed={speed}
                       lat={lat}
                       lon={lon}
                       mode={inputMode}
