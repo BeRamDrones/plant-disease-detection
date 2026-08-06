@@ -1,12 +1,12 @@
 @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  /* ── Background Hierarchy (Slate Grey Palette) ── */
-  --bg-base:        #0E1117;
-  --bg-surface:     #161B26;
-  --bg-panel:       #1C222E;
-  --bg-elevated:    #222A38;
-  --bg-glass:       rgba(22, 27, 38, 0.85);
+  /* ── Background Hierarchy (Enterprise Dark Slate) ── */
+  --bg-base:        #090C15;
+  --bg-surface:     #121824;
+  --bg-panel:       #1A2234;
+  --bg-elevated:    #222D42;
+  --bg-glass:       rgba(18, 24, 36, 0.88);
   --bg-glass-light: rgba(255, 255, 255, 0.03);
 
   /* ── Primary Palette & Accents ── */
@@ -16,7 +16,7 @@
   --cyan-dim:       rgba(0, 240, 255, 0.12);
   --cyan-glow:      rgba(0, 240, 255, 0.35);
 
-  --purple-dark:    #222A38;
+  --purple-dark:    #222D42;
   --purple:         #3B82F6;
   --purple-bright:  #60A5FA;
   --purple-dim:     rgba(59, 130, 246, 0.15);
@@ -27,17 +27,17 @@
   --pink-dim:       rgba(255, 45, 149, 0.15);
   --pink-glow:      rgba(255, 45, 149, 0.35);
 
-  --green:          #00F0FF;
-  --green-dim:      rgba(0, 240, 255, 0.12);
-  --amber:          #3B82F6;
-  --amber-dim:      rgba(59, 130, 246, 0.15);
+  --green:          #10B981;
+  --green-dim:      rgba(16, 185, 129, 0.15);
+  --amber:          #F59E0B;
+  --amber-dim:      rgba(245, 158, 11, 0.15);
   --red:            #FF2D95;
   --red-dim:        rgba(255, 45, 149, 0.15);
 
   /* ── Text System ── */
   --text-primary:   #FFFFFF;
-  --text-secondary: rgba(255, 255, 255, 0.75);
-  --text-muted:     rgba(255, 255, 255, 0.45);
+  --text-secondary: rgba(255, 255, 255, 0.78);
+  --text-muted:     rgba(255, 255, 255, 0.48);
   --text-disabled:  rgba(255, 255, 255, 0.28);
   --text-cyan:      #00F0FF;
 
@@ -48,9 +48,9 @@
   --border-purple:  rgba(59, 130, 246, 0.3);
   --border-pink:    rgba(255, 45, 149, 0.4);
 
-  --shadow-button:  0 0 12px rgba(0, 240, 255, 0.35);
-  --shadow-card:    0 0 20px rgba(0, 240, 255, 0.05);
-  --shadow-active:  0 0 16px rgba(0, 240, 255, 0.25);
+  --shadow-button:  0 0 14px rgba(0, 240, 255, 0.35);
+  --shadow-card:    0 0 24px rgba(0, 240, 255, 0.05);
+  --shadow-active:  0 0 18px rgba(0, 240, 255, 0.25);
   --shadow-pink:    0 0 20px rgba(255, 45, 149, 0.35);
 
   --radius-sm:  5px;
@@ -71,12 +71,14 @@ html, body {
   color: var(--text-primary);
   font-family: var(--font-body);
   overflow: hidden;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* ── Scrollbar ── */
-::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: var(--bg-base); }
-::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: rgba(0, 240, 255, 0.25); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--cyan); }
 
 /* ── Glass Panel ── */
 .glass {
@@ -89,7 +91,7 @@ html, body {
 }
 .glass-bright {
   border-color: var(--border-bright);
-  box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.05);
+  box-shadow: var(--shadow-card), inset 0 1px 0 rgba(255,255,255,0.08);
 }
 
 /* ── HUD grid lines ── */
@@ -132,7 +134,7 @@ html, body {
 }
 @keyframes glow-pulse {
   0%, 100% { box-shadow: 0 0 20px var(--cyan-glow); }
-  50%       { shadow: 0 0 40px var(--cyan-glow), 0 0 80px rgba(0, 240, 255, 0.25); }
+  50%       { box-shadow: 0 0 40px var(--cyan-glow), 0 0 80px rgba(0, 240, 255, 0.25); }
 }
 @keyframes rotate-ring {
   from { transform: rotate(0deg); }
@@ -159,7 +161,7 @@ html, body {
   border-radius: var(--radius-sm);
   border: 1px solid var(--cyan);
   background: var(--cyan);
-  color: #0E1117;
+  color: #090C15;
   box-shadow: var(--shadow-button);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -167,13 +169,13 @@ html, body {
 }
 .btn:hover {
   background: var(--cyan-bright);
-  box-shadow: 0 0 18px rgba(0, 240, 255, 0.5);
-  color: #0E1117;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.55);
+  color: #090C15;
 }
 .btn:active {
   background: var(--cyan-active);
   transform: scale(0.97);
-  color: #0E1117;
+  color: #090C15;
 }
 
 /* Secondary Button */

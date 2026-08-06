@@ -23,7 +23,7 @@
 }
 
 /* ─────────────────────────────────────────────────────── */
-/* Sidebar nav (Slate Dark Background & High Contrast)      */
+/* Sidebar nav (Enterprise Dark Slate Background)           */
 /* ─────────────────────────────────────────────────────── */
 .sidebar {
   display: flex;
@@ -31,11 +31,12 @@
   gap: 6px;
   align-items: center;
   padding: 10px 0;
-  background: #0E1117;
+  background: #090C15;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   flex-shrink: 0;
   width: 68px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .navBtn {
@@ -51,19 +52,33 @@
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s ease;
+  position: relative;
 }
 
 .navBtn:hover {
   color: var(--text-secondary);
-  background: #222A38;
+  background: #1A2234;
   border-color: rgba(0, 240, 255, 0.3);
 }
 
 .navActive {
   color: var(--cyan) !important;
-  background: #222A38 !important;
+  background: #1A2234 !important;
   border-color: var(--border-bright) !important;
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.3) !important;
+  box-shadow: 0 0 14px rgba(0, 240, 255, 0.3) !important;
+}
+
+.navActive::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: #00F0FF;
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px #00F0FF;
 }
 
 .navLabel {
@@ -128,7 +143,7 @@
   align-items: center;
   gap: 10px;
   padding: 6px 10px;
-  background: #161B26;
+  background: #121824;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   flex-shrink: 0;
@@ -184,7 +199,7 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border);
-  background: #161B26;
+  background: #121824;
 }
 
 .detectCol {
@@ -208,11 +223,12 @@
 
 /* ── Health Card ── */
 .healthCard {
-  background: #161B26;
+  background: #121824;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 14px;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .healthHeader {
@@ -239,7 +255,7 @@
 .healthBar {
   height: 6px;
   border-radius: 3px;
-  background: #222A38;
+  background: #1A2234;
   overflow: hidden;
   position: relative;
 }
@@ -262,11 +278,12 @@
 
 /* ── Zone List ── */
 .zoneList {
-  background: #161B26;
+  background: #121824;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 14px;
   flex-shrink: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .zoneListHeader {
@@ -352,7 +369,7 @@
   border-radius: var(--radius-md);
   overflow: hidden;
   border: 1px solid var(--border);
-  background: #161B26;
+  background: #121824;
 }
 
 .mapSidebar {
@@ -373,10 +390,11 @@
   width: 100%;
   height: 100%;
   gap: 12px;
-  background: #161B26;
+  background: #121824;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .dataHeader {
@@ -403,7 +421,7 @@
 }
 
 .searchInput {
-  background: #1C222E;
+  background: #1A2234;
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 8px 14px;
@@ -425,7 +443,7 @@
 }
 
 .selectInput {
-  background: #1C222E;
+  background: #1A2234;
   border: 1px solid var(--border);
   border-radius: 5px;
   padding: 8px 14px;
@@ -445,7 +463,7 @@
   overflow-y: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: #1C222E;
+  background: #1A2234;
 }
 
 .table {
@@ -461,7 +479,7 @@
   letter-spacing: 0.1em;
   color: var(--text-secondary);
   padding: 12px 16px;
-  background: #222A38;
+  background: #222D42;
   border-bottom: 1px solid var(--border);
   text-transform: uppercase;
 }
@@ -472,7 +490,7 @@
   font-size: 13px;
   border-bottom: 1px solid rgba(0, 240, 255, 0.08);
   color: var(--text-secondary);
-  background: #161B26;
+  background: #121824;
 }
 
 .table tr:hover td {
@@ -526,13 +544,14 @@
 }
 
 .configCard {
-  background: #161B26;
+  background: #121824;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   padding: 22px;
   display: flex;
   flex-direction: column;
   gap: 18px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 .configHeader {
@@ -581,7 +600,7 @@
   width: 100%;
   height: 6px;
   border-radius: 3px;
-  background: #222A38;
+  background: #1A2234;
   outline: none;
   cursor: pointer;
 }
@@ -592,7 +611,7 @@
   height: 16px;
   border-radius: 50%;
   background: var(--cyan);
-  border: 2px solid #0E1117;
+  border: 2px solid #090C15;
   box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
   transition: transform 0.1s;
 }
@@ -605,7 +624,7 @@
   display: flex;
   justify-content: space-between;
   padding: 10px 14px;
-  background: #1C222E;
+  background: #1A2234;
   border: 1px solid var(--border);
   border-radius: 5px;
 }
@@ -627,7 +646,7 @@
 /* Hardware & Real-time Console Terminal Logs (12px JetBrains Mono) */
 .techLogs {
   flex: 1;
-  background: #0E1117;
+  background: #090C15;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: 14px;

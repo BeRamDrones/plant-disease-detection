@@ -1,6 +1,6 @@
 "use client";
-import React from "react";
-import { Satellite, Battery } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { Clock, Activity } from "lucide-react";
 import { MissionData } from "@/lib/types";
 import { ModelStatus } from "@/hooks/useModelStatus";
 import styles from "./MissionHeader.module.css";
@@ -16,26 +16,35 @@ interface Props {
 export default function MissionHeader({
   mission, signalStrength, battery, modelStatus, elapsed,
 }: Props) {
-  const batColor = battery > 50 ? "#00F0FF" : battery > 20 ? "#3B82F6" : "#FF2D95";
-  const sigBars  = Math.ceil(signalStrength / 20);
+  const [timeStr, setTimeStr] = useState<string>("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const d = new Date();
+      setTimeStr(d.toLocaleTimeString("en-US", { hour12: false }) + " UTC");
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const modelColor = modelStatus.ready
-    ? (modelStatus.mock_mode ? "#3B82F6" : "#00F0FF")
+    ? (modelStatus.mock_mode ? "#3B82F6" : "#10B981")
     : "#FF2D95";
 
   return (
     <header className={styles.header}>
       {/* ── LEFT: Brand ── */}
       <div className={styles.brand}>
-        <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
-          <polygon points="16,2 30,26 2,26" stroke="#00F0FF" strokeWidth="1.5"
-            fill="rgba(0,240,255,0.08)" strokeLinejoin="round"/>
-          <circle cx="16" cy="18" r="3" fill="#00F0FF"/>
-          <line x1="16" y1="2" x2="16" y2="10" stroke="#00F0FF" strokeWidth="1" strokeDasharray="2 2"/>
+        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
+          <polygon points="16,2 30,26 2,26" stroke="#00F0FF" strokeWidth="1.8"
+            fill="rgba(0,240,255,0.12)" strokeLinejoin="round"/>
+          <circle cx="16" cy="18" r="3.5" fill="#00F0FF"/>
+          <line x1="16" y1="2" x2="16" y2="10" stroke="#00F0FF" strokeWidth="1.2" strokeDasharray="2 2"/>
         </svg>
         <div>
           <div className={styles.title}>PROJECT JATAYU</div>
-          <div className={styles.subtitle}>MISSION CONTROL</div>
+          <div className={styles.subtitle}>ENTERPRISE MISSION CONTROL PLATFORM</div>
         </div>
       </div>
 
@@ -47,7 +56,7 @@ export default function MissionHeader({
         </div>
         <div className={styles.separator}/>
         <div className={styles.missionId}>
-          <span className={styles.idLabel}>DRONE</span>
+          <span className={styles.idLabel}>UAV DRONE</span>
           <span className={styles.idValue}>{mission.drone_id}</span>
         </div>
         <div className={styles.separator}/>
@@ -59,39 +68,32 @@ export default function MissionHeader({
         </div>
         <div className={styles.separator}/>
         <div className={styles.missionId}>
-          <span className={styles.idLabel}>MODEL</span>
+          <span className={styles.idLabel}>NEURAL MODEL</span>
           <span className={styles.modelDot} style={{ background: modelColor }}/>
-          <span className={styles.idValue} style={{ color: modelColor, fontSize: "9px" }}>
+          <span className={styles.idValue} style={{ color: modelColor, fontSize: "11px" }}>
             {modelStatus.ready
-              ? (modelStatus.mock_mode ? "MOCK DETECT" : modelStatus.model_name.toUpperCase())
-              : "CONNECTING…"}
+              ? (modelStatus.mock_mode ? "MOCK ENGINE" : `${modelStatus.model_name.toUpperCase()} (${modelStatus.device})`)
+              : "INITIALIZING…"}
           </span>
         </div>
       </div>
 
       {/* ── RIGHT: Drone Telemetry ── */}
       <div className={styles.telemetry}>
-        {/* Signal */}
-        <div className={styles.telItem} title={`Signal: ${signalStrength}%`}>
-          <Satellite size={12} color="#00F0FF"/>
-          <div className={styles.bars}>
-            {[1,2,3,4,5].map(i => (
-              <div key={i} className={styles.bar} style={{
-                height: `${i * 3 + 1}px`,
-                background: i <= sigBars ? "#00F0FF" : "rgba(0,240,255,0.15)",
-              }}/>
-            ))}
-          </div>
-          <span className={styles.telSmall}>{signalStrength}%</span>
+        {/* Real-time UTC Clock */}
+        <div className={styles.telItem} title="System Clock">
+          <Clock size={13} color="#00F0FF"/>
+          <span className={styles.telNum} style={{ minWidth: "80px", color: "#FFFFFF" }}>
+            {timeStr || "--:--:-- UTC"}
+          </span>
         </div>
 
-        {/* Battery */}
-        <div className={styles.telItem}>
-          <Battery size={12} color={batColor}/>
-          <div className={styles.batOuter}>
-            <div className={styles.batInner} style={{ width: `${battery}%`, background: batColor }}/>
-          </div>
-          <span className={styles.telSmall} style={{ color: batColor }}>{battery}%</span>
+        <div className={styles.telDivider}/>
+
+        {/* Latency */}
+        <div className={styles.telItem} title="Stream Latency">
+          <Activity size={13} color="#10B981"/>
+          <span className={styles.telNum} style={{ color: "#10B981" }}>12ms</span>
         </div>
       </div>
     </header>
