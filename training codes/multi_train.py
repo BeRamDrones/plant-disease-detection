@@ -418,8 +418,8 @@ def main():
     parser.add_argument(
         "--base-dir",
         type=str,
-        default=r"C:\BeRam\plant disease\training1-6",
-        help="Directory containing subfolders with data.yaml",
+        default=None,  # <-- No default; must be passed explicitly via --base-dir
+        help="Directory containing subfolders with data.yaml (required)",
     )
     parser.add_argument(
         "--output-dir",

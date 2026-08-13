@@ -1,11 +1,12 @@
 import os
 import cv2
 import glob
+# pyrefly: ignore [missing-import]
 import albumentations as A
 
 TARGET_CLASSES = ["Rice", "Cassava", "Cauliflower", "Mango", "papaya", "peach", "Pumkin"]
 
-BASE_DIR = r"C:\BeRam\plant disease\training1-6"
+BASE_DIR = r""  # <-- Set this to the root folder containing your per-class dataset subdirectories
 AUG_PER_IMAGE = 3
 
 transform = A.Compose([
