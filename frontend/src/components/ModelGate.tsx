@@ -51,8 +51,8 @@ export default function ModelGate({ status }: Props) {
         <div className={styles.statusBlock}>
           {status.error ? (
             <>
-              <WifiOff size={16} color="#FF2D95" />
-              <span className={styles.statusText} style={{ color: "#FF2D95" }}>
+              <WifiOff size={16} color="#EF4444" />
+              <span className={styles.statusText} style={{ color: "#EF4444" }}>
                 BACKEND UNREACHABLE — RETRYING…
               </span>
             </>

@@ -12,6 +12,10 @@ export interface Detection {
   detected_at: string;
   rank?: number;        // classify model rank: 1 = top prediction, 2 = 2nd, etc.
   grid_zone?: string;   // image quadrant: Top-Left, Top-Right, etc.
+  plant_class?: string;
+  parent_confidence?: number;
+  parent_model?: string;
+  child_status?: string;
 }
 
 export interface ZoneSummary {
@@ -39,16 +43,16 @@ export interface MissionSummary {
 }
 
 export const DISEASE_COLORS: Record<string, string> = {
-  healthy:         "#00F0FF",
-  powdery_mildew:  "#3B82F6",
-  rust:            "#FF2D95",
-  blight:          "#FF2D95",
-  leaf_spot:       "#3B82F6",
-  mosaic_virus:    "#3B82F6",
-  bacterial_wilt:  "#FF2D95",
-  anthracnose:     "#3B82F6",
-  downy_mildew:    "#3B82F6",
-  unknown:         "rgba(255,255,255,0.45)",
+  healthy:         "#22C55E",
+  powdery_mildew:  "#F59E0B",
+  rust:            "#EF4444",
+  blight:          "#EF4444",
+  leaf_spot:       "#F59E0B",
+  mosaic_virus:    "#F59E0B",
+  bacterial_wilt:  "#EF4444",
+  anthracnose:     "#F59E0B",
+  downy_mildew:    "#F59E0B",
+  unknown:         "#5E6D88",
 };
 
 // Plant classes from parent model (best.pt)
@@ -62,78 +66,97 @@ const CROP_CLASSES = new Set([
 ]);
 
 export function diseaseColor(cls: string): string {
-  const norm = cls.toLowerCase().replace(/_/g, "");
-  if (norm === "healthy") return DISEASE_COLORS.healthy;
+  const norm = cls.toLowerCase().replace(/[\s_-]/g, "");
+  if (norm.includes("healthy")) return DISEASE_COLORS.healthy;
+  if (norm === "notaleaf") return "#EF4444";
   if (CROP_CLASSES.has(norm)) {
-    return norm === "notaleaf" ? "#FF2D95" : "#00F0FF"; // Cyan for crops, Pink for NotALeaf alert
+    return "#38BDF8"; // Sky teal for crop ID
   }
   
-  // Find key in DISEASE_COLORS by normalized name
+  if (["rust", "blight", "scab", "rot", "wilt", "measles", "gumming"].some(d => norm.includes(d))) {
+    return "#EF4444"; // Red for critical diseases
+  }
+  if (["spot", "mildew", "virus", "anthracnose", "miner", "mold", "mosaic", "sigatoka"].some(d => norm.includes(d))) {
+    return "#F59E0B"; // Amber for moderate/high diseases
+  }
+  
   const match = Object.keys(DISEASE_COLORS).find(
-    k => k.toLowerCase().replace(/_/g, "") === norm
+    k => norm.includes(k.toLowerCase().replace(/[\s_-]/g, ""))
   );
-  return match ? DISEASE_COLORS[match] : DISEASE_COLORS.unknown;
+  return match ? DISEASE_COLORS[match] : "#F59E0B";
 }
 
 export function severityLabel(cls: string): string {
-  const norm = cls.toLowerCase().replace(/_/g, "");
-  if (norm === "healthy") return "HEALTHY";
+  const norm = cls.toLowerCase().replace(/[\s_-]/g, "");
+  if (norm.includes("healthy")) return "HEALTHY";
   if (norm === "notaleaf") return "NOT A LEAF";
-  if (CROP_CLASSES.has(norm)) return "CROP ID"; // Parent model classifies crop
+  if (CROP_CLASSES.has(norm)) return "CROP ID";
   
-  if (["rust", "blight", "bacterialwilt"].includes(norm)) return "CRITICAL";
-  if (["leafspot", "anthracnose"].includes(norm)) return "HIGH";
+  if (["rust", "blight", "bacterialwilt", "scab", "rot", "measles", "gumming"].some(d => norm.includes(d))) return "CRITICAL";
+  if (["spot", "anthracnose", "virus", "mildew", "miner", "mold", "mosaic", "sigatoka"].some(d => norm.includes(d))) return "HIGH";
   return "MODERATE";
 }
 
 export function getTreatmentAdvisory(cls: string): { action: string; remedy: string } {
-  const norm = cls.toLowerCase().replace(/_/g, "");
-  if (norm === "healthy") {
+  const norm = cls.toLowerCase().replace(/[\s_-]/g, "");
+  if (norm.includes("healthy")) {
     return {
-      action: "Routine Monitoring",
-      remedy: "Optimal foliage health. Continue regular irrigation and drone surveillance schedules."
+      action: "Routine Surveillance & Optimal Foliage",
+      remedy: "Foliage verified healthy. Continue scheduled UAV mission flights and irrigation cycles."
     };
   }
-  if (norm === "powderymildew") {
+  if (norm.includes("scab")) {
+    return {
+      action: "Fungicide Spray & Pruning",
+      remedy: "Apply protectant captan or difenoconazole spray. Remove infected leaves and improve canopy ventilation."
+    };
+  }
+  if (norm.includes("rot")) {
+    return {
+      action: "Immediate Sector Sanitation",
+      remedy: "Prune dead mummified fruit and infected cankers. Apply thiophanate-methyl or captan fungicide."
+    };
+  }
+  if (norm.includes("powderymildew") || norm.includes("mildew")) {
     return {
       action: "Targeted Fungicide Spray",
       remedy: "Apply sulfur-based or potassium bicarbonate spray. Improve air circulation around canopy."
     };
   }
-  if (norm === "rust") {
+  if (norm.includes("rust")) {
     return {
       action: "Immediate Sector Isolation",
       remedy: "Apply copper hydroxide fungicide immediately. Avoid overhead watering to prevent spore spread."
     };
   }
-  if (norm === "blight") {
+  if (norm.includes("blight")) {
     return {
       action: "Emergency Drone Payload Treatment",
       remedy: "High risk of rapid crop loss. Deploy systemic fungicide (Mancozeb/Chlorothalonil) and prune infected stems."
     };
   }
-  if (norm === "leafspot") {
+  if (norm.includes("spot")) {
     return {
       action: "Canopy Pruning & Bio-Fungicide",
       remedy: "Apply Bacillus subtilis or neem oil extract. Remove fallen foliage from zone perimeter."
     };
   }
-  if (norm === "mosaicvirus") {
+  if (norm.includes("virus") || norm.includes("mosaic")) {
     return {
-      action: "Vector Vector Control (Aphids/Whiteflies)",
-      remedy: "Viral infection—no direct chemical cure. Destroy infected hosts and control aphid vectors."
+      action: "Vector Control (Aphids/Whiteflies)",
+      remedy: "Viral infection—no direct chemical cure. Destroy infected hosts and control insect vectors."
     };
   }
-  if (norm === "anthracnose") {
+  if (norm.includes("anthracnose")) {
     return {
       action: "Foliar Spray & Soil Aeration",
       remedy: "Apply copper-based fungicides during early morning. Ensure proper soil drainage."
     };
   }
-  if (norm === "downymildew") {
+  if (norm.includes("miner")) {
     return {
-      action: "Humidity Reduction & Spray",
-      remedy: "Apply systemic oomycete fungicide (Fosetyl-Al). Reduce irrigation frequency."
+      action: "Insecticide / Parasitic Wasps",
+      remedy: "Apply abamectin or spinosad. Introduce Diglyphus isaea biological control agents."
     };
   }
   if (norm === "notaleaf") {
@@ -178,4 +201,3 @@ export function getZoneFromCoords(lat: number, lon: number): { zone_id: number; 
     zone_label: label,
   };
 }
-

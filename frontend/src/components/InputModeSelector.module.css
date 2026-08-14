@@ -3,8 +3,8 @@
   align-items: center;
   gap: 4px;
   padding: 4px;
-  background: #1C222E;
-  border: 1px solid var(--border);
+  background: rgba(14, 20, 34, 0.9);
+  border: 1px solid var(--border-subtle);
   border-radius: 10px;
   position: relative;
 }
@@ -20,31 +20,31 @@
   color: var(--text-muted);
   cursor: pointer;
   transition: all 0.2s ease;
-  font-family: var(--font-hud);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   position: relative;
   white-space: nowrap;
 }
 
 .tab:hover:not(.disabled):not(.active) {
   color: var(--text-secondary);
-  background: #222A38;
-  border-color: rgba(0, 240, 255, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(56, 189, 248, 0.2);
 }
 
 .tab.active {
-  background: #222A38;
-  border-color: var(--cyan);
-  color: var(--cyan);
-  box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
-  font-size: 11px;
+  background: rgba(56, 189, 248, 0.12);
+  border-color: rgba(56, 189, 248, 0.4);
+  color: #38BDF8;
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.18);
+  font-size: 12px;
   font-weight: 700;
 }
 
 .tab.disabled {
-  opacity: 0.28;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -54,10 +54,10 @@
 }
 
 .tabLabel {
-  letter-spacing: 0.12em;
+  letter-spacing: 0.03em;
 }
 
-/* Pulse dot on active tab */
+/* Active indicator dot */
 .activeDot {
   position: absolute;
   top: 6px;
@@ -65,31 +65,21 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--cyan);
-  animation: pulseDot 2s ease-in-out infinite;
-}
-
-@keyframes pulseDot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.4; transform: scale(0.6); }
+  background: #38BDF8;
+  box-shadow: 0 0 6px #38BDF8;
+  animation: pulse-dot 1.5s ease-in-out infinite;
 }
 
 /* Lock badge */
 .lockBadge {
-  font-family: var(--font-hud);
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.1em;
-  color: #00F0FF;
+  letter-spacing: 0.04em;
+  color: #38BDF8;
   padding: 3px 10px;
-  background: #3B82F6;
-  border: 1px solid rgba(0, 240, 255, 0.4);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
   border-radius: 20px;
   margin-left: 6px;
-  animation: lockPulse 2s ease-in-out infinite;
-}
-
-@keyframes lockPulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
 }

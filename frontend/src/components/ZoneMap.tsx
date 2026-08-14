@@ -101,15 +101,17 @@ export default function ZoneMap({ zones: propZones, detections = [] }: Props) {
 
   return (
     <div className={styles.wrap}>
-      {/* Header */}
+      {/* ── Header ── */}
       <div className={styles.hdr}>
         <div className={styles.hdrLeft}>
-          <Layers size={13} color="#00F0FF"/>
-          <span className={styles.title}>RUNTIME FIELD ZONES</span>
+          <MapPin size={15} color="#38BDF8"/>
+          <span className={styles.title}>FIELD SURVEY ZONES</span>
         </div>
         <div className={styles.hdrRight}>
           {activeZones.length === 0 ? (
-            <span className={styles.scanBadge}>DISCOVERY ACTIVE</span>
+            <span className={styles.scanBadge}>
+              DISCOVERY ACTIVE
+            </span>
           ) : (
             <span className={styles.activeBadge}>{activeZones.length} RUNTIME ZONE(S) FORMED</span>
           )}

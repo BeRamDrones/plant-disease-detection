@@ -6,6 +6,8 @@ import { Detection, MissionData } from "@/lib/types";
 import { generateMissionSummary } from "@/lib/mockData";
 import { generateMissionPDF } from "@/lib/pdfReport";
 
+const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 interface Props { mission: MissionData; detections: Detection[]; elapsed: number; }
 
 type State = "idle" | "generating" | "done" | "error";
@@ -17,9 +19,30 @@ export default function CompleteMissionButton({ mission, detections, elapsed }: 
     if (state !== "idle") return;
     setState("generating");
     try {
-      await new Promise(r => setTimeout(r, 800)); // brief loading feel
       const summary = generateMissionSummary(detections, mission);
-      generateMissionPDF(summary, detections, elapsed);
+      
+      // Request AI Agronomic synthesis from backend (Google Gemini / Neural Engine)
+      let aiData = null;
+      try {
+        const aiRes = await fetch(`${BACKEND}/api/missions/ai-report-summary`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mission_id: mission.mission_id,
+            crop_class: mission.crop_class || detections[0]?.plant_class,
+            health_score: summary.health_score,
+            detections: detections.slice(0, 100),
+            zones: summary.zones_breakdown,
+          }),
+        });
+        if (aiRes.ok) {
+          aiData = await aiRes.json();
+        }
+      } catch {
+        /* Fallback seamlessly handled inside generateMissionPDF */
+      }
+
+      generateMissionPDF(summary, detections, elapsed, aiData);
       setState("done");
       setTimeout(() => setState("idle"), 4000);
     } catch (e) {

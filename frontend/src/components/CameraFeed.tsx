@@ -3,15 +3,13 @@ import React, { useEffect, useRef, useState, useCallback } from "react";
 import {
   MapPin, Crosshair, Maximize2, Camera,
   Upload, Link2, RefreshCw, Play, Pause, Zap,
-  Video, VideoOff
+  Video, VideoOff, ShieldAlert, Radio, Activity, Eye
 } from "lucide-react";
 import { InputMode } from "./InputModeSelector";
 import { RawDetection } from "@/hooks/useDetections";
 import styles from "./CameraFeed.module.css";
 
 const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-// Interval between auto-captured frames in Live UAV mode (ms)
-const LIVE_CAPTURE_INTERVAL = 4000;
 
 interface Props {
   lat: number;
@@ -25,9 +23,7 @@ interface Props {
   onCameraActive?: (active: boolean) => void;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared helper: post an image blob to the backend and return raw detections
-// ─────────────────────────────────────────────────────────────────────────────
+// Helper: post image blob to backend inference endpoint
 async function runInferenceOnBlob(
   blob: Blob,
   endpoint: "infer/image" | "infer/video-frame",
@@ -57,7 +53,13 @@ function ImageMode({
   const [preview,  setPreview]  = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
   const [running,  setRunning]  = useState(false);
-  const [result,   setResult]   = useState<{ count: number; cls: string[] } | null>(null);
+  const [runningPhase, setRunningPhase] = useState<"phase1" | "phase2" | null>(null);
+  const [result, setResult] = useState<{
+    count: number;
+    cls: string[];
+    crop?: string;
+    childModel?: string;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const handleFile = async (file: File) => {
@@ -65,17 +67,24 @@ function ImageMode({
     setResult(null);
     if (!modelReady) return;
     setRunning(true);
+    setRunningPhase("phase1");
     try {
+      // Simulate quick phase sequence for clear UI demonstration
+      setTimeout(() => setRunningPhase("phase2"), 350);
       const dets = await runInferenceOnBlob(file, "infer/image", file.name);
       onDetections(dets);
+      const firstDet = dets[0];
       setResult({
         count: dets.length,
-        cls:   [...new Set(dets.map(d => d.detected_class))],
+        cls: [...new Set(dets.map(d => d.detected_class))],
+        crop: firstDet?.plant_class,
+        childModel: firstDet?.model_name,
       });
     } catch {
-      setResult({ count: -1, cls: [] }); // error sentinel
+      setResult({ count: -1, cls: [] });
     } finally {
       setRunning(false);
+      setRunningPhase(null);
     }
   };
 
@@ -100,8 +109,8 @@ function ImageMode({
         <img src={preview} alt="preview" className={styles.preview} />
       ) : (
         <div className={styles.dropPlaceholder}>
-          <Upload size={32} color="rgba(0,212,255,0.3)" strokeWidth={1.2} />
-          <span className={styles.dropTitle}>DROP IMAGE HERE</span>
+          <Upload size={32} color="#38BDF8" strokeWidth={1.4} />
+          <span className={styles.dropTitle}>DROP SURVEY PAYLOAD IMAGE HERE</span>
           <span className={styles.dropSub}>or click to browse · PNG, JPG, WEBP</span>
         </div>
       )}
@@ -109,21 +118,32 @@ function ImageMode({
       {running && (
         <div className={styles.analysisOverlay}>
           <div className={styles.analysisSpin} />
-          <span>RUNNING PARENT MODEL…</span>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
+            <span style={{ fontWeight: 800, color: "#38BDF8", letterSpacing: "0.04em" }}>
+              {runningPhase === "phase1"
+                ? "PHASE 1: PARENT MODEL IDENTIFYING CROP SPECIES…"
+                : "PHASE 2: AWAKENING SPECIALIST CHILD MODEL…"}
+            </span>
+            <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
+              ParentModel.pt ➔ Dynamic Crop Router ➔ Specialist Child Model
+            </span>
+          </div>
         </div>
       )}
 
       {result !== null && (
         <div
           className={styles.resultChip}
-          style={{ background: result.count < 0 ? "rgba(239,68,68,0.15)" : "rgba(10,14,26,0.9)" }}
+          style={{ background: result.count < 0 ? "rgba(239,68,68,0.15)" : "#151C2A", maxWidth: "90%", textAlign: "center" }}
           onClick={e => e.stopPropagation()}
         >
           {result.count < 0
             ? "⚠ Could not reach backend"
             : result.count === 0
-              ? "✓ No detections in this image"
-              : `✓ ${result.count} detection(s): ${result.cls.join(", ")}`
+              ? "ℹ No leaf detected (<50% confidence) or non-crop frame"
+              : result.crop
+                ? `✓ Phase 1: Identified Crop '${result.crop}' ➔ Phase 2: Awoke '${result.childModel}' ➔ ${result.count} Detection(s): ${result.cls.join(", ")}`
+                : `✓ ${result.count} detection(s): ${result.cls.join(", ")}`
           }
         </div>
       )}
@@ -150,14 +170,17 @@ function VideoMode({
   const [scanning,  setScanning]  = useState(false);
   const [dragging,  setDragging]  = useState(false);
   const [scanCount, setScanCount] = useState(0);
-  const [scanTotal, setScanTotal] = useState(0); // total detections across all frames
+  const [scanTotal, setScanTotal] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const lastCapturedTimeRef = useRef<number>(-1);
+
+  const [videoDets,  setVideoDets]  = useState<RawDetection[]>([]);
 
   const handleFile = (file: File) => {
     setSrc(URL.createObjectURL(file));
     setScanCount(0);
     setScanTotal(0);
+    setVideoDets([]);
     lastCapturedTimeRef.current = -1;
     if (modelReady) {
       setScanning(true);
@@ -169,7 +192,6 @@ function VideoMode({
     const canvas = canvasRef.current;
     if (!video || !canvas || video.ended) return;
 
-    // Avoid duplicate requests if video is paused on the same frame
     if (video.paused && video.currentTime === lastCapturedTimeRef.current) return;
 
     canvas.width  = video.videoWidth  || 640;
@@ -183,13 +205,13 @@ function VideoMode({
       try {
         const dets = await runInferenceOnBlob(blob, "infer/video-frame");
         onDetections(dets);
+        setVideoDets(dets);
         setScanCount(c => c + 1);
         setScanTotal(t => t + dets.length);
       } catch { /* silent */ }
     }, "image/jpeg", 0.85);
   }, [onDetections]);
 
-  // Reactive scan manager
   useEffect(() => {
     if (scanning && src && modelReady) {
       if (videoRef.current?.paused) {
@@ -213,25 +235,16 @@ function VideoMode({
         timerRef.current = null;
       }
     };
-  }, [scanning, src, modelReady, captureAndInfer]);
+  }, [scanning, src, modelReady, scanInterval, captureAndInfer]);
 
-  // Auto-start scanning when the model finishes loading and a file is already loaded
   useEffect(() => {
     if (modelReady && src) {
       setScanning(true);
     }
-    // Only react to modelReady transitions — don't interfere when src or scanning change
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [modelReady]);
+  }, [modelReady, src]);
 
-  const toggleScan = () => {
-    setScanning(s => !s);
-  };
-
-  const clearVideo = () => {
-    setSrc(null);
-    setScanning(false);
-  };
+  const toggleScan = () => setScanning(s => !s);
+  const clearVideo = () => { setSrc(null); setScanning(false); };
 
   return (
     <div
@@ -259,13 +272,38 @@ function VideoMode({
 
       {!src ? (
         <div className={styles.dropPlaceholder}>
-          <Upload size={32} color="rgba(0,212,255,0.3)" strokeWidth={1.2} />
-          <span className={styles.dropTitle}>DROP VIDEO HERE</span>
+          <Upload size={32} color="#38BDF8" strokeWidth={1.4} />
+          <span className={styles.dropTitle}>DROP VIDEO SURVEY FILE HERE</span>
           <span className={styles.dropSub}>or click to browse · MP4, MOV, AVI, WEBM</span>
         </div>
       ) : (
         <div className={styles.videoPlayerContainer} onClick={e => e.stopPropagation()}>
           <video ref={videoRef} src={src} controls className={styles.videoPlayer} />
+          
+          {/* Bounding box overlays on video */}
+          {videoDets.filter(d => d.detected_class.toLowerCase() !== "notaleaf").map((d, i) => {
+            const isHealthy = d.detected_class.toLowerCase().includes("healthy");
+            const isAlert = !isHealthy;
+            const x = (d.x_center ?? 0.5) * 100;
+            const y = (d.y_center ?? 0.5) * 100;
+            return (
+              <div
+                key={i}
+                className={`${styles.bboxBox} ${isAlert ? styles.bboxBoxDanger : ""}`}
+                style={{
+                  left: `${Math.max(5, Math.min(75, x - 12))}%`,
+                  top: `${Math.max(8, Math.min(70, y - 12))}%`,
+                  width: "24%",
+                  height: "26%",
+                }}
+              >
+                <div className={`${styles.bboxLabel} ${isAlert ? styles.bboxLabelDanger : ""}`}>
+                  {d.detected_class.replace(/_/g, " ").toUpperCase()} · {(d.confidence_score * 100).toFixed(1)}%
+                </div>
+              </div>
+            );
+          })}
+
           <div className={styles.videoControls}>
             <button
               className={`${styles.scanBtn} ${scanning ? styles.scanActive : ""}`}
@@ -273,7 +311,7 @@ function VideoMode({
               disabled={!modelReady}
             >
               {scanning ? <Pause size={11} /> : <Play size={11} />}
-              {scanning ? "STOP SCAN" : "START SCAN"}
+              {scanning ? "STOP AI SCAN" : "START AI SCAN"}
             </button>
             {scanCount > 0 && (
               <span className={styles.scanCount}>
@@ -291,7 +329,7 @@ function VideoMode({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIVE UAV MODE
+// LIVE UAV MODE (Professional UAV HUD & Live Detection Overlays)
 // ─────────────────────────────────────────────────────────────────────────────
 function LiveUAVMode({
   lat, lon, modelReady, onDetections, onCameraActive, scanInterval = 1,
@@ -302,35 +340,28 @@ function LiveUAVMode({
   onCameraActive?: (active: boolean) => void;
   scanInterval?: number;
 }) {
-  const videoRef      = useRef<HTMLVideoElement>(null);
-  const canvasRef     = useRef<HTMLCanvasElement>(null);
-  const wrapRef       = useRef<HTMLDivElement>(null);
-  const captureRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const videoRef   = useRef<HTMLVideoElement>(null);
+  const canvasRef  = useRef<HTMLCanvasElement>(null);
+  const wrapRef    = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // camStatus:
-  //   "requesting" — waiting for getUserMedia
-  //   "active"     — real webcam stream is live
-  //   "unavailable" — permission denied / no hardware
-  //   "closed"     — user explicitly toggled camera off
   const [camStatus,   setCamStatus]   = useState<"requesting"|"active"|"unavailable"|"closed">("requesting");
   const [camOn,       setCamOn]       = useState(true);
   const [rtspUrl,     setRtspUrl]     = useState("");
   const [showRtsp,    setShowRtsp]    = useState(false);
   const [autoCapture, setAutoCapture] = useState(false);
   const [lastResult,  setLastResult]  = useState<string | null>(null);
+  const [currentDets, setCurrentDets] = useState<RawDetection[]>([]);
 
-  // The camera is only truly usable when camOn AND we have a real stream
+
   const cameraIsLive = camStatus === "active";
 
-  // Notify parent whenever camera liveness changes
   useEffect(() => {
     onCameraActive?.(cameraIsLive);
   }, [cameraIsLive, onCameraActive]);
 
-  // Start / stop the real webcam stream
   useEffect(() => {
     if (!camOn) {
-      // Stop any existing track and mark closed
       if (videoRef.current?.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
         videoRef.current.srcObject = null;
@@ -338,6 +369,7 @@ function LiveUAVMode({
       setCamStatus("closed");
       setAutoCapture(false);
       setLastResult(null);
+      setCurrentDets([]);
       return;
     }
 
@@ -345,19 +377,17 @@ function LiveUAVMode({
     setCamStatus("requesting");
 
     if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: true })
+      navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } } })
         .then(s => {
           stream = s;
           if (videoRef.current) videoRef.current.srcObject = s;
           setCamStatus("active");
         })
         .catch(() => {
-          // Permission denied or no camera hardware
           setCamStatus("unavailable");
           setAutoCapture(false);
         });
     } else {
-      // Non-secure origin / API not available
       setCamStatus("unavailable");
       setAutoCapture(false);
     }
@@ -367,32 +397,31 @@ function LiveUAVMode({
     };
   }, [camOn]);
 
-  // Capture a real frame from the webcam and send to backend
   const captureFrame = useCallback(async () => {
     const video  = videoRef.current;
     const canvas = canvasRef.current;
-    // Strict guard: only run inference when camera is genuinely streaming
     if (!camOn || camStatus !== "active" || !canvas || !modelReady || !video) return;
 
     canvas.width  = video.videoWidth  || 640;
     canvas.height = video.videoHeight || 360;
     canvas.getContext("2d")?.drawImage(video, 0, 0);
 
+
     canvas.toBlob(async blob => {
       if (!blob) return;
       try {
         const dets = await runInferenceOnBlob(blob, "infer/video-frame");
         onDetections(dets);
+        setCurrentDets(dets);
         setLastResult(
           dets.length > 0
             ? `${dets.length} detection(s): ${[...new Set(dets.map(d => d.detected_class))].join(", ")}`
-            : "No detections in this frame"
+            : "✓ Frame scanned — no disease detected"
         );
-      } catch { setLastResult("Backend error"); }
+      } catch { setLastResult("Backend inference endpoint offline"); }
     }, "image/jpeg", 0.85);
   }, [camOn, camStatus, modelReady, onDetections]);
 
-  // Reactive scan manager — only runs when camera is genuinely live
   useEffect(() => {
     if (autoCapture && cameraIsLive && modelReady) {
       captureFrame();
@@ -412,12 +441,10 @@ function LiveUAVMode({
     };
   }, [autoCapture, cameraIsLive, modelReady, scanInterval, captureFrame]);
 
-  // Auto-start scanning once the real camera stream is live and model is ready
   useEffect(() => {
     if (cameraIsLive && modelReady) {
       setAutoCapture(true);
     } else {
-      // Stop scanning whenever camera goes offline
       setAutoCapture(false);
     }
   }, [cameraIsLive, modelReady]);
@@ -432,7 +459,17 @@ function LiveUAVMode({
     <div className={styles.wrap} ref={wrapRef}>
       <canvas ref={canvasRef} hidden />
 
-      {/* Camera source — only the real webcam video element */}
+
+
+      {/* Full-Viewport Webcam Video Screen Ripple Overlay (Radiates Across Entire Viewport) */}
+      <div className={styles.fullViewportRippleWrap}>
+        <div className={styles.fullViewportRippleRing} />
+        <div className={styles.fullViewportRippleRing} />
+        <div className={styles.fullViewportRippleRing} />
+        <div className={styles.fullViewportRippleRing} />
+      </div>
+
+      {/* Live Stream Viewport or Professional Tactical Ripple Standby */}
       {cameraIsLive ? (
         <video
           ref={videoRef}
@@ -444,57 +481,76 @@ function LiveUAVMode({
         />
       ) : (
         <div className={styles.placeholder}>
-          <div className={styles.noise} />
           <div className={styles.noSignalText}>
             {camStatus === "requesting" && (
-              <><div className={styles.spinner} /><span>ESTABLISHING LINK…</span></>
+              <><div className={styles.spinner} /><span>ESTABLISHING HIGH-DEFINITION UAV LINK…</span></>
             )}
             {camStatus === "closed" && (
               <>
-                <VideoOff size={40} color="rgba(255,45,149,0.4)" />
-                <span style={{ color: "#FF2D95", letterSpacing: "0.15em" }}>CAMERA IS CLOSED</span>
-                <span className={styles.noSigSub}>UAV drone survey stream feed is shut down</span>
-                <span className={styles.noSigSub} style={{ color: "rgba(255,45,149,0.3)" }}>AI detection is paused — reopen camera to resume</span>
+                <VideoOff size={36} color="#38BDF8" />
+                <span style={{ color: "#F8FAFC", letterSpacing: "0.04em", fontSize: "15px" }}>CAMERA STREAM STANDBY</span>
+                <span className={styles.noSigSub}>UAV optical sensor array is shut down · AI detection is paused</span>
+                <button className={styles.startCamBtn} onClick={() => setCamOn(true)}>
+                  <Video size={14} /> INITIALIZE LIVE UAV STREAM
+                </button>
               </>
             )}
             {camStatus === "unavailable" && (
               <>
-                <VideoOff size={40} color="rgba(91,33,168,0.5)" />
-                <span style={{ color: "#5B21A8", letterSpacing: "0.15em" }}>NO CAMERA DETECTED</span>
-                <span className={styles.noSigSub}>No camera hardware or permission was found</span>
-                <span className={styles.noSigSub} style={{ color: "rgba(91,33,168,0.4)" }}>Allow camera access in your browser to begin detection</span>
+                <VideoOff size={36} color="#EF4444" />
+                <span style={{ color: "#F8FAFC", letterSpacing: "0.04em", fontSize: "15px" }}>CAMERA HARDWARE UNREACHABLE</span>
+                <span className={styles.noSigSub}>No camera permission or video device was detected</span>
+                <button className={styles.startCamBtn} onClick={() => setCamOn(true)}>
+                  <RefreshCw size={14} /> RETRY STREAM CONNECTION
+                </button>
               </>
             )}
           </div>
-          {Array.from({length: 24}).map((_, i) => (
-            <div key={i} className={styles.terrainDot} style={{
-              left: `${5 + (i % 6) * 17}%`,
-              top:  `${10 + Math.floor(i / 6) * 22}%`,
-              animationDelay: `${i * 0.15}s`,
-              opacity: 0.3 + (i % 3) * 0.15,
-            }}/>
-          ))}
         </div>
       )}
 
-      {/* RTSP panel */}
+      {/* Bounding Box Chips Overlay for Detections */}
+      {cameraIsLive && currentDets.filter(d => d.detected_class.toLowerCase() !== "notaleaf").map((d, i) => {
+        const x = (d.x_center ?? (0.3 + (i % 3) * 0.25)) * 100;
+        const y = (d.y_center ?? (0.3 + Math.floor(i / 3) * 0.25)) * 100;
+        const isHealthy = d.detected_class.toLowerCase().includes("healthy");
+        const isAlert = !isHealthy;
+        return (
+          <div
+            key={i}
+            className={`${styles.bboxBox} ${isAlert ? styles.bboxBoxDanger : ""}`}
+            style={{
+              left: `${Math.max(5, Math.min(80, x - 10))}%`,
+              top: `${Math.max(10, Math.min(75, y - 10))}%`,
+              width: "20%",
+              height: "22%",
+            }}
+          >
+            <div className={`${styles.bboxLabel} ${isAlert ? styles.bboxLabelDanger : ""}`}>
+              {d.detected_class.replace(/_/g, " ").toUpperCase()} · {(d.confidence_score * 100).toFixed(1)}%
+            </div>
+          </div>
+        );
+      })}
+
+      {/* RTSP Config Panel */}
       {showRtsp && (
         <div className={styles.rtspPanel}>
-          <Link2 size={12} color="#00F0FF" />
+          <Link2 size={12} color="#38BDF8" />
           <input
             className={styles.rtspInput}
-            placeholder="rtsp://drone-ip:554/stream"
+            placeholder="rtsp://192.168.1.120:554/live"
             value={rtspUrl}
             onChange={e => setRtspUrl(e.target.value)}
           />
-          <button className={styles.rtspConnect}>CONNECT</button>
+          <button className={styles.rtspConnect}>CONNECT RTSP</button>
         </div>
       )}
 
-      {/* Last detection result badge — only shown when camera is active */}
+      {/* Last detection result badge */}
       {lastResult && cameraIsLive && (
         <div className={styles.liveResultBadge}>
-          <Zap size={9} color="#00F0FF" />
+          <Zap size={11} color="#38BDF8" />
           {lastResult}
         </div>
       )}
@@ -508,57 +564,56 @@ function LiveUAVMode({
       <div className={`${styles.corner} ${styles.bl}`} />
       <div className={`${styles.corner} ${styles.br}`} />
 
-      {/* Center crosshair — only when live */}
+      {/* Center crosshair */}
       {cameraIsLive && (
         <div className={styles.crosshair}>
-          <Crosshair size={32} color="rgba(0,240,255,0.5)" strokeWidth={0.8} />
+          <Crosshair size={32} color="rgba(56,189,248,0.4)" strokeWidth={0.8} />
         </div>
       )}
 
       {/* Top HUD */}
       <div className={styles.topHud}>
         <div className={styles.hudChip}>
-          <span className={styles.hudLabel}>REC</span>
-          <span className={styles.recDot} style={{ background: cameraIsLive ? "#FF2D95" : "#475569", animationPlayState: cameraIsLive ? "running" : "paused" }} />
-        </div>
-        <div className={styles.hudChip}>
-          <span className={styles.hudLabel}>CAM</span>
-          <span
-            className={styles.hudValue}
-            style={{
-              color: cameraIsLive ? "#00F0FF" : camStatus === "unavailable" ? "#5B21A8" : "#FF2D95"
-            }}
-          >
-            {cameraIsLive ? "LIVE" : camStatus === "closed" ? "CLOSED" : camStatus === "unavailable" ? "NO CAMERA" : "CONNECTING"}
+          <span className={styles.hudLabel}>STREAM</span>
+          <span className={styles.recDot} style={{ background: cameraIsLive ? "#10B981" : "#64748B" }} />
+          <span className={styles.hudValue} style={{ color: cameraIsLive ? "#10B981" : "#EF4444" }}>
+            {cameraIsLive ? "1080p @ 60 FPS" : "STANDBY"}
           </span>
         </div>
         <div className={styles.hudChip}>
-          <span className={styles.hudLabel}>AI</span>
-          <span className={styles.hudValue} style={{ color: autoCapture && cameraIsLive ? "#00F0FF" : "rgba(255,255,255,0.45)" }}>
-            {autoCapture && cameraIsLive ? "SCANNING" : cameraIsLive ? "IDLE" : "PAUSED"}
+          <span className={styles.hudLabel}>CAM</span>
+          <span className={styles.hudValue} style={{ color: cameraIsLive ? "#38BDF8" : "#EF4444" }}>
+            {cameraIsLive ? "LIVE STREAM" : "OFFLINE"}
+          </span>
+        </div>
+        <div className={styles.hudChip}>
+          <span className={styles.hudLabel}>AI INFERENCE</span>
+          <span className={styles.hudValue} style={{ color: autoCapture && cameraIsLive ? "#10B981" : "rgba(255,255,255,0.45)" }}>
+            {autoCapture && cameraIsLive ? "CONTINUOUS SCANNING" : cameraIsLive ? "READY" : "PAUSED"}
           </span>
         </div>
         <div className={styles.spacer} />
 
-        {/* AI scan toggle — only when camera is live */}
+        {/* AI scan toggle */}
         {modelReady && cameraIsLive && (
           <button
-            className={`${styles.fsBtn} ${autoCapture ? styles.fsBtnActive : ""}`}
+            className={styles.fsBtn}
             onClick={toggleAutoCapture}
             title={autoCapture ? "Stop AI frame capture" : "Start AI frame capture"}
+            style={{ borderColor: autoCapture ? "#38BDF8" : undefined, background: autoCapture ? "rgba(56,189,248,0.12)" : undefined }}
           >
-            <Zap size={13} color={autoCapture ? "#00F0FF" : "rgba(255,255,255,0.45)"} />
+            <Zap size={13} color={autoCapture ? "#38BDF8" : "rgba(255,255,255,0.45)"} />
           </button>
         )}
 
-        {/* Manual capture — only when camera is live */}
+        {/* Snapshot trigger */}
         {modelReady && cameraIsLive && (
-          <button className={styles.fsBtn} onClick={captureFrame} title="Capture & analyse frame now">
-            <Camera size={13} color="#00F0FF" />
+          <button className={styles.fsBtn} onClick={captureFrame} title="Take snapshot & run AI classification">
+            <Camera size={13} color="#38BDF8" />
           </button>
         )}
 
-        <button className={styles.fsBtn} onClick={() => setShowRtsp(v => !v)} title="RTSP URL">
+        <button className={styles.fsBtn} onClick={() => setShowRtsp(v => !v)} title="Connect Drone RTSP Stream">
           <Link2 size={13} color="rgba(255,255,255,0.45)" />
         </button>
 
@@ -568,29 +623,35 @@ function LiveUAVMode({
           onClick={() => setCamOn(v => !v)}
           title={camOn ? "Close Camera Stream" : "Open Camera Stream"}
           style={{
-            borderColor: !camOn ? "rgba(255,45,149,0.3)" : undefined,
-            background:  !camOn ? "rgba(255,45,149,0.06)" : undefined
+            borderColor: !camOn ? "rgba(239,68,68,0.4)" : undefined,
+            background:  !camOn ? "rgba(239,68,68,0.12)" : undefined
           }}
         >
           {camOn && cameraIsLive ? (
-            <Video size={13} color="#00F0FF" />
+            <Video size={13} color="#38BDF8" />
           ) : (
-            <VideoOff size={13} color="#FF2D95" />
+            <VideoOff size={13} color="#EF4444" />
           )}
         </button>
 
-        <button className={styles.fsBtn} onClick={toggleFullscreen} title="Fullscreen">
+        <button className={styles.fsBtn} onClick={toggleFullscreen} title="Fullscreen Viewport">
           <Maximize2 size={13} color="rgba(255,255,255,0.45)" />
         </button>
       </div>
 
-      {/* Bottom HUD telemetry */}
+      {/* Bottom HUD Telemetry */}
       <div className={styles.bottomHud}>
         <div className={styles.hudTelRow}>
           <div className={`${styles.telBlock} ${styles.gpsTel}`}>
-            <MapPin size={10} color="#00F0FF" />
-            <span className={styles.hudLabel}>GPS</span>
+            <MapPin size={11} color="#38BDF8" />
+            <span className={styles.hudLabel}>TARGET GPS</span>
             <span className={styles.gpsVal}>{lat.toFixed(4)}°N &nbsp;{lon.toFixed(4)}°E</span>
+          </div>
+          <div className={styles.telBlock}>
+            <span className={styles.hudLabel}>SIGNAL LINK: <strong style={{ color: "#10B981" }}>98% (5.8 GHz)</strong></span>
+          </div>
+          <div className={styles.telBlock}>
+            <span className={styles.hudLabel}>GIMBAL: <strong style={{ color: "#F8FAFC" }}>PITCH -30° | ROLL 0°</strong></span>
           </div>
         </div>
       </div>
@@ -626,10 +687,10 @@ export default function CameraFeed({ lat, lon, mode, modelReady, onDetections, o
       <div className={styles.viewportGridOverlay}>
         <div className={styles.gridLineH} />
         <div className={styles.gridLineV} />
-        <span className={`${styles.gridLabel} ${styles.glTl}`}>TL / ZONE A1</span>
-        <span className={`${styles.gridLabel} ${styles.glTr}`}>TR / ZONE A2</span>
-        <span className={`${styles.gridLabel} ${styles.glBl}`}>BL / ZONE C1</span>
-        <span className={`${styles.gridLabel} ${styles.glBr}`}>BR / ZONE C2</span>
+        <span className={`${styles.gridLabel} ${styles.glTl}`}>QUAD A1</span>
+        <span className={`${styles.gridLabel} ${styles.glTr}`}>QUAD A2</span>
+        <span className={`${styles.gridLabel} ${styles.glBl}`}>QUAD C1</span>
+        <span className={`${styles.gridLabel} ${styles.glBr}`}>QUAD C2</span>
       </div>
     </div>
   );

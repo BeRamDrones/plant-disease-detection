@@ -19,7 +19,7 @@ const BACKEND_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const DEFAULT: ModelStatus = {
   ready: false,
   mock_mode: false,
-  model_name: "best.pt",
+  model_name: "ParentModel.pt",
   loaded_at: null,
   torch_available: false,
   loading: true,

@@ -23,15 +23,15 @@ logger = logging.getLogger("app.main")
 async def lifespan(app: FastAPI):
     """
     FastAPI lifespan context manager.
-    Loads the parent model (best.pt) before the server starts accepting
+    Loads the parent model (ParentModel.pt) before the server starts accepting
     requests, so the frontend's model-status poll resolves quickly.
     """
     logger.info("=" * 60)
     logger.info("Project Jatayu — starting up")
-    logger.info("Loading parent model (best.pt)…")
+    logger.info("Loading parent model (ParentModel.pt)…")
 
     registry = ModelRegistry.get()
-    success = registry.load("best.pt")
+    success = registry.load("ParentModel.pt")
 
     if success:
         logger.info("✓ Parent model ready — accepting inference requests")
@@ -52,7 +52,7 @@ app = FastAPI(
     title="Project Jatayu Backend",
     description=(
         "FastAPI + PostgreSQL/PostGIS backend for drone-based plant disease detection. "
-        "Parent model: best.pt (crop classifier) → child models (disease specialists)."
+        "Parent model: ParentModel.pt (crop classifier) → child models (disease specialists)."
     ),
     version="2.0.0",
     lifespan=lifespan,
@@ -87,4 +87,5 @@ async def root():
 
 
 if __name__ == "__main__":
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8000, reload=True)
+    # Port 8001 — port 8000 is occupied by ndms_backend_service on this machine
+    uvicorn.run("app.main:app", host="127.0.0.1", port=8001, reload=True)

@@ -186,3 +186,27 @@ async def get_mission_summary(
             status_code=400,
             detail=f"Failed to generate mission summary: {str(e)}"
         )
+
+
+@router.post("/ai-report-summary")
+async def generate_ai_report_summary(payload: dict):
+    """
+    Generates AI Agronomic Intelligence summary, yield risk analysis,
+    and chemical/biological prescriptions for the mission report using Google Gemini.
+    """
+    from app.services.ai_service import AIService
+
+    mission_id = payload.get("mission_id", 1)
+    crop_class = payload.get("crop_class")
+    health_score = float(payload.get("health_score", 100.0))
+    detections = payload.get("detections", [])
+    zones = payload.get("zones", [])
+
+    return AIService.generate_agronomic_report(
+        mission_id=mission_id,
+        crop_class=crop_class,
+        health_score=health_score,
+        detections=detections,
+        zones=zones
+    )
+

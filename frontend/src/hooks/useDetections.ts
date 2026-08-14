@@ -12,7 +12,10 @@ export interface RawDetection {
   x_center?: number;
   y_center?: number;
   plant_class?: string;
+  parent_confidence?: number;
+  parent_model?: string;
   model_name?: string;
+  child_status?: string;
   rank?: number;        // classification rank: 1 = top prediction
   grid_zone?: string;
 }
@@ -29,21 +32,22 @@ function mapDetection(raw: RawDetection, droneLat: number, droneLon: number): De
   const lon = +(droneLon + lonOffset).toFixed(5);
   const zone = getZoneFromCoords(lat, lon);
 
-  // Any classification result with confidence < 0.90 is classified as "notaleaf"
-  const detectedClass = raw.confidence_score < 0.90 ? "notaleaf" : raw.detected_class;
-
   return {
-    id:               `det-${_counter++}`,
-    detected_class:   detectedClass,
-    confidence_score: raw.confidence_score,
+    id:                `det-${_counter++}`,
+    detected_class:    raw.detected_class,
+    confidence_score:  raw.confidence_score,
     lat,
     lon,
-    zone_id:          zone.zone_id,
-    zone_label:       zone.zone_label,
-    model_version: raw.model_name ?? "best.pt",
-    detected_at: new Date().toISOString(),
-    rank:         raw.rank,
-    grid_zone:    raw.grid_zone,
+    zone_id:           zone.zone_id,
+    zone_label:        zone.zone_label,
+    model_version:     raw.model_name ?? "best.pt",
+    detected_at:       new Date().toISOString(),
+    rank:              raw.rank,
+    grid_zone:         raw.grid_zone,
+    plant_class:       raw.plant_class,
+    parent_confidence: raw.parent_confidence,
+    parent_model:      raw.parent_model,
+    child_status:      raw.child_status,
   };
 }
 

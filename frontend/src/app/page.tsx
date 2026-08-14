@@ -7,6 +7,7 @@ import ZoneMap from "@/components/ZoneMap";
 import StatsBar from "@/components/StatsBar";
 import CompleteMissionButton from "@/components/CompleteMissionButton";
 import ModelGate from "@/components/ModelGate";
+import ModelsDashboard from "@/components/ModelsDashboard";
 import InputModeSelector, { InputMode } from "@/components/InputModeSelector";
 import { useMissionDetections } from "@/hooks/useMissionDetections";
 import { useModelStatus } from "@/hooks/useModelStatus";
@@ -15,7 +16,7 @@ import { generateMissionSummary } from "@/lib/mockData";
 import { diseaseColor, severityLabel } from "@/lib/types";
 import {
   RotateCcw, Sliders, Cpu, Database, Info, Search, Filter, Download,
-  LayoutDashboard, Radio, Map, BarChart2, Settings,
+  LayoutDashboard, Radio, Map, BarChart2, Settings, Box,
 } from "lucide-react";
 import styles from "./page.module.css";
 
@@ -49,6 +50,7 @@ const NAV_ITEMS = [
   { id: "stream",    icon: <Radio size={18} />,           label: "STREAM" },
   { id: "map",       icon: <Map size={18} />,             label: "MAP"    },
   { id: "analytics", icon: <BarChart2 size={18} />,       label: "DATA"   },
+  { id: "models",    icon: <Box size={18} />,             label: "MODELS" },
   { id: "settings",  icon: <Settings size={18} />,        label: "CFG"    },
 ] as const;
 
@@ -70,14 +72,14 @@ export default function MissionDashboard() {
   const [classFilter, setClassFilter] = useState<"all" | "diseased" | "healthy">("all");
 
   // ── Config State for CFG View ──
-  const [confidenceThreshold, setConfidenceThreshold] = useState(0.90);
+  const [confidenceThreshold, setConfidenceThreshold] = useState(0.25);
   const [captureRate, setCaptureRate] = useState(1.0);
 
   // ── Filtered Detections for Data table ──
   const filteredDetections = useMemo(() => {
     return detections.filter(d => {
       const matchesSearch = d.detected_class.toLowerCase().includes(searchQuery.toLowerCase());
-      const isHealthy     = d.detected_class.toLowerCase() === "healthy";
+      const isHealthy     = d.detected_class.toLowerCase().includes("healthy");
       const matchesFilter =
         classFilter === "all" ||
         (classFilter === "healthy" && isHealthy) ||
@@ -113,7 +115,8 @@ export default function MissionDashboard() {
     stream:    1,
     map:       2,
     analytics: 3,
-    settings:  4,
+    models:    4,
+    settings:  5,
   }[activeNav] ?? 0;
 
   // Export CSV helper
@@ -168,7 +171,7 @@ export default function MissionDashboard() {
         <div className={styles.workspace}>
           <div 
             className={styles.sliderTrack}
-            style={{ transform: `translateX(-${navIndex * 20}%)` }}
+            style={{ transform: `translateX(-${navIndex * (100 / 6)}%)` }}
           >
             
             {/* SLIDE 0: Dashboard (DASH) */}
@@ -189,15 +192,15 @@ export default function MissionDashboard() {
                     />
                     <div className={styles.ctrlGroup}>
                       <div className={styles.detChips}>
-                        <span className={styles.chip} style={{ color:"#00F0FF", borderColor:"rgba(0,240,255,0.3)", background:"rgba(0,240,255,0.1)" }}>
+                        <span className={styles.chip} style={{ color:"#8FA0B8", borderColor:"#1E2A3A", background:"#141D2B" }}>
                           {detections.length} CROPS CLASSIFIED
                         </span>
                         {totalScans > 0 && (
-                          <span className={styles.chip} style={{ color:"#3B82F6", borderColor:"rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.12)" }}>
+                          <span className={styles.chip} style={{ color:"#8FA0B8", borderColor:"#1E2A3A", background:"#141D2B" }}>
                             {totalScans} SCANS
                           </span>
                         )}
-                        <span className={styles.chip} style={{ color:"#3B82F6", borderColor:"rgba(59,130,246,0.3)", background:"rgba(59,130,246,0.12)" }} title="Parent model classifies crop species; child disease specialist models standby">
+                        <span className={styles.chip} style={{ color:"#FBBF24", borderColor:"rgba(245,158,11,0.3)", background:"#2A1D0A" }} title="Parent model classifies crop species; child disease specialist models standby">
                           CHILD MODELS: STANDBY
                         </span>
                       </div>
@@ -236,7 +239,7 @@ export default function MissionDashboard() {
                     <div className={styles.healthHeader}>
                       <span className={styles.healthLabel}>MISSION HEALTH SCORE</span>
                       <span className={styles.healthPct} style={{
-                        color: summary.health_score >= 70 ? "#00F0FF" : summary.health_score >= 40 ? "#3B82F6" : "#FF2D95"
+                        color: summary.health_score >= 70 ? "#22C55E" : summary.health_score >= 40 ? "#F59E0B" : "#EF4444"
                       }}>
                         {summary.health_score.toFixed(1)}%
                       </span>
@@ -244,7 +247,7 @@ export default function MissionDashboard() {
                     <div className={styles.healthBar}>
                       <div className={styles.healthFill} style={{
                         width: `${summary.health_score}%`,
-                        background: summary.health_score >= 70 ? "#00F0FF" : summary.health_score >= 40 ? "#3B82F6" : "#FF2D95",
+                        background: summary.health_score >= 70 ? "#22C55E" : summary.health_score >= 40 ? "#F59E0B" : "#EF4444",
                       }}/>
                       <div className={styles.healthShimmer}/>
                     </div>
@@ -428,7 +431,12 @@ export default function MissionDashboard() {
               </div>
             </div>
 
-            {/* SLIDE 4: Model Configuration Settings (CFG) */}
+            {/* SLIDE 4: Models Dashboard (MODELS) */}
+            <div className={styles.slide}>
+              <ModelsDashboard />
+            </div>
+
+            {/* SLIDE 5: Model Configuration Settings (CFG) */}
             <div className={styles.slide}>
               <div className={styles.configLayout}>
                 {/* Settings Panel */}
@@ -509,7 +517,7 @@ export default function MissionDashboard() {
                   <div className={styles.techLogs}>
                     {`[SYS] Initializing hardware monitors...\n` +
                      `[Device] GPU detected → ${modelStatus.device || "cpu"}\n` +
-                     `[YOLO] YOLO best.pt loaded successfully.\n` +
+                     `[YOLO] YOLO ${modelStatus.model_name || "ParentModel.pt"} loaded successfully.\n` +
                      `[YOLO] Task: ${modelStatus.model_task || "classify"} | Device: ${modelStatus.device || "cpu"}\n` +
                      `[Server] FastAPI routing active on port 8000.\n` +
                      `[Status] Ready to accept image/video streams.\n` +

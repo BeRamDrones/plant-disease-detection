@@ -1,0 +1,377 @@
+"""
+Project Jatayu — Two-Stage AI Pipeline
+
+Stage 1 │ Real-Time VLM Audit        │ Groq: qwen/qwen3-32b
+        │ Trigger: per key detection  │ Validates YOLO output w/ reasoning
+        │
+Stage 2 │ Post-Mission Report Engine  │ Groq: llama-3.1-8b-instant
+        │ Trigger: mission end (1x)   │ Full Farm Field Report JSON + PDF
+"""
+
+import os
+import json
+import logging
+import urllib.request
+from typing import Dict, Any, List, Optional
+
+logger = logging.getLogger("app.services.ai_service")
+
+GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Env helpers
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _get_groq_key() -> str:
+    return os.getenv("GROQ_API_KEY", "").strip()
+
+def _get_vlm_model() -> str:
+    return os.getenv("GROQ_VLM_MODEL", "qwen/qwen3-32b").strip()
+
+def _get_report_model() -> str:
+    return os.getenv("GROQ_REPORT_MODEL", "llama-3.1-8b-instant").strip()
+
+def _persist_env(updates: Dict[str, str]) -> None:
+    try:
+        lines: List[str] = []
+        if os.path.exists(ENV_PATH):
+            with open(ENV_PATH, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+
+        found = {k: False for k in updates}
+        new_lines = []
+        for line in lines:
+            replaced = False
+            for k, v in updates.items():
+                if line.startswith(k + "=") or line.startswith(k + " "):
+                    new_lines.append(f'{k}="{v}"\n')
+                    found[k] = True
+                    replaced = True
+                    break
+            if not replaced:
+                new_lines.append(line)
+
+        for k, v in updates.items():
+            if not found[k]:
+                new_lines.append(f'{k}="{v}"\n')
+
+        with open(ENV_PATH, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+    except Exception as e:
+        logger.warning(f"[AIService] .env persist failed: {e}")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Core Groq caller (OpenAI-compatible)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _groq_chat(
+    model: str,
+    system: str,
+    user: str,
+    max_tokens: int = 1024,
+    timeout: int = 25,
+) -> Optional[str]:
+    """Single Groq chat completion call."""
+    key = _get_groq_key()
+    if not key:
+        logger.warning("[AIService] GROQ_API_KEY not set — skipping AI call.")
+        return None
+
+    payload = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.15,
+        "max_tokens": max_tokens,
+        "stream": False,
+    }
+
+    try:
+        req = urllib.request.Request(
+            GROQ_BASE_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            choices = result.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "").strip()
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        logger.warning(f"[AIService] Groq HTTP {e.code}: {body[:300]}")
+    except Exception as e:
+        logger.warning(f"[AIService] Groq call failed: {e}")
+    return None
+
+
+def _parse_json_response(text: str) -> Optional[Dict[str, Any]]:
+    """Strips markdown fences and parses JSON."""
+    clean = text.strip()
+    for prefix in ("```json", "```"):
+        if clean.startswith(prefix):
+            clean = clean[len(prefix):]
+    if clean.endswith("```"):
+        clean = clean[:-3]
+    try:
+        return json.loads(clean.strip())
+    except Exception:
+        return None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1 — Real-Time VLM Audit  (qwen/qwen3-32b)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class VLMAuditService:
+    """
+    MODEL 1: Real-Time VLM Audit
+    Runs 1–2 times per key detection event during the mission.
+    Validates YOLO classification with agronomic reasoning.
+    """
+
+    SYSTEM_PROMPT = (
+        "You are an expert plant pathologist and computer vision auditor for Project Jatayu UAV. "
+        "Your role is to verify YOLO model detections with scientific agronomic reasoning. "
+        "Be concise, decisive, and output only valid JSON."
+    )
+
+    @classmethod
+    def audit_detection(
+        cls,
+        crop: str,
+        detected_class: str,
+        confidence: float,
+        zone: Optional[str] = None,
+        extra_context: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """
+        Audits a single key YOLO detection.
+        Returns verdict, confidence adjustment, and reasoning.
+        """
+        model = _get_vlm_model()
+        zone_str = f"Zone {zone}" if zone else "unknown zone"
+        ctx = extra_context or "No additional field metadata available."
+
+        user_prompt = f"""Audit this drone-captured detection:
+
+Crop Species   : {crop}
+Detected Class : {detected_class}
+YOLO Confidence: {confidence * 100:.1f}%
+Sector         : {zone_str}
+Field Context  : {ctx}
+
+Respond ONLY with this JSON:
+{{
+  "verdict": "VERIFIED" | "UNCERTAIN" | "REJECTED",
+  "adjusted_confidence": <float 0-1>,
+  "pathogen_name": "<scientific name if verified, else null>",
+  "reasoning": "<1-sentence clinical justification>",
+  "severity": "LOW" | "MODERATE" | "HIGH" | "CRITICAL"
+}}"""
+
+        raw = _groq_chat(model, cls.SYSTEM_PROMPT, user_prompt, max_tokens=512)
+
+        if raw:
+            parsed = _parse_json_response(raw)
+            if parsed:
+                return {
+                    "vlm_model": model,
+                    "verdict": parsed.get("verdict", "UNCERTAIN"),
+                    "adjusted_confidence": float(parsed.get("adjusted_confidence", confidence)),
+                    "pathogen_name": parsed.get("pathogen_name"),
+                    "reasoning": parsed.get("reasoning", ""),
+                    "severity": parsed.get("severity", "MODERATE"),
+                    "ai_audited": True,
+                }
+
+        # Fallback — pass-through with no audit
+        return {
+            "vlm_model": model,
+            "verdict": "UNAUDITED",
+            "adjusted_confidence": confidence,
+            "pathogen_name": None,
+            "reasoning": "VLM audit skipped (API key not configured or call failed).",
+            "severity": "MODERATE" if confidence >= 0.7 else "LOW",
+            "ai_audited": False,
+        }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2 — Post-Mission Agronomy Report Engine  (llama-3.1-8b-instant)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class AIService:
+    """
+    MODEL 2: Post-Mission Agronomy Report Engine
+    Runs once at mission end. Generates full structured Farm Field Report.
+    """
+
+    SYSTEM_PROMPT = (
+        "You are a Senior Agronomist and Precision Drone Farming Specialist for Project Jatayu. "
+        "Generate a structured, professional agronomic report in valid JSON only. "
+        "No markdown, no extra commentary — pure JSON."
+    )
+
+    @classmethod
+    def is_configured(cls) -> bool:
+        return bool(_get_groq_key())
+
+
+    @classmethod
+    def generate_agronomic_report(
+        cls,
+        mission_id: Any,
+        crop_class: Optional[str],
+        health_score: float,
+        detections: List[Dict[str, Any]],
+        zones: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """
+        Stage 2: Generates full Farm Field Report.
+        Called once when user clicks COMPLETE MISSION.
+        """
+        # Aggregate detections
+        disease_counts: Dict[str, int] = {}
+        crops_identified: set = set()
+        avg_confs: List[float] = []
+
+        for d in detections:
+            cls_name = d.get("detected_class", "unknown")
+            disease_counts[cls_name] = disease_counts.get(cls_name, 0) + 1
+            if d.get("plant_class"):
+                crops_identified.add(d["plant_class"])
+            if d.get("confidence_score"):
+                avg_confs.append(float(d["confidence_score"]))
+
+        crop_str = crop_class or (list(crops_identified)[0] if crops_identified else "Agricultural Crop")
+        mean_conf = (sum(avg_confs) / len(avg_confs)) if avg_confs else 0.0
+        active_diseases = [
+            k for k in disease_counts
+            if "healthy" not in k.lower() and k.lower() != "notaleaf"
+        ]
+
+        # Risk tier
+        if health_score >= 80 and not active_diseases:
+            risk_level, risk_color, yield_impact = "LOW / OPTIMAL", "#10B981", "< 3%"
+        elif health_score >= 50:
+            risk_level, risk_color, yield_impact = "MODERATE / CAUTION", "#F59E0B", "8–15%"
+        else:
+            risk_level, risk_color, yield_impact = "HIGH / CRITICAL", "#EF4444", "25–40%"
+
+        report_model = _get_report_model()
+
+        if cls.is_configured() and active_diseases:
+            user_prompt = f"""Post-mission farm field disease survey analysis:
+
+Crop Species      : {crop_str}
+Canopy Health     : {health_score:.1f}%
+Detected Diseases : {", ".join(active_diseases)}
+Total Detections  : {len(detections)}
+Avg Confidence    : {mean_conf * 100:.1f}%
+Affected Zones    : {len([z for z in zones if z.get("detection_count", 0) > 0])} of {len(zones)} sectors
+
+Generate a complete Farm Field Report JSON:
+{{
+  "executive_summary": "<2-sentence clinical diagnosis>",
+  "diagnosis_verification_score": <integer 0-100>,
+  "primary_pathogen": "<scientific name and classification>",
+  "chemical_prescription": "<active ingredient + dosage per litre + application method>",
+  "organic_remedy": "<organic/biological control agent + dosage>",
+  "prevention_steps": ["<step 1>", "<step 2>", "<step 3>"],
+  "drone_action_plan": "<altitude, speed, droplet size, grid pattern>",
+  "farmer_advisory": "<plain-language 1-sentence action for farmer>"
+}}"""
+
+            raw = _groq_chat(report_model, cls.SYSTEM_PROMPT, user_prompt, max_tokens=1024)
+            if raw:
+                parsed = _parse_json_response(raw)
+                if parsed:
+                    return {
+                        "ai_engine": f"Groq / {report_model}",
+                        "crop": crop_str,
+                        "health_score": round(health_score, 1),
+                        "risk_level": risk_level,
+                        "risk_color": risk_color,
+                        "yield_impact": yield_impact,
+                        "executive_summary": parsed.get("executive_summary", ""),
+                        "diagnosis_verification_score": parsed.get("diagnosis_verification_score", 85),
+                        "primary_pathogen": parsed.get("primary_pathogen", active_diseases[0] if active_diseases else "None"),
+                        "chemical_prescription": parsed.get("chemical_prescription", ""),
+                        "biological_remedy": parsed.get("organic_remedy", ""),
+                        "prevention_steps": parsed.get("prevention_steps", []),
+                        "drone_action_plan": parsed.get("drone_action_plan", ""),
+                        "farmer_advisory": parsed.get("farmer_advisory", ""),
+                    }
+
+        # ── Built-in fallback engine ──────────────────────────────────────────
+        dominant = active_diseases[0] if active_diseases else "healthy"
+        norm = dominant.lower().replace("_", "")
+
+        if "blight" in norm:
+            chem = "Mancozeb 75% WP @ 2.5 g/L or Azoxystrobin 23% SC @ 1 ml/L via drone ULV."
+            bio = "Trichoderma harzianum @ 5 g/L + Reynoutria sachalinensis extract."
+            pathogen = "Phytophthora infestans / Alternaria solani (Fungal Oomycete Blight)"
+            drone = "3.5 m altitude · 120-µm droplet · targeted grid on infected zones."
+            summary = f"Severe foliar blighting on {crop_str}. Immediate sector containment advised."
+            prevention = ["Remove infected plant debris promptly", "Ensure adequate row spacing for airflow", "Apply preventative copper-based spray before monsoon season"]
+        elif "mildew" in norm:
+            chem = "Wettable Sulfur 80% WDG @ 3 g/L or Hexaconazole 5% EC @ 2 ml/L."
+            bio = "Potassium Bicarbonate 0.5% + cold-pressed Neem Oil."
+            pathogen = "Erysiphe / Podosphaera spp. (Powdery/Downy Mildew)"
+            drone = "Early-morning application at 3 m altitude to maximise leaf surface contact."
+            summary = f"Powdery spore colonies on {crop_str}. Fungicidal barrier treatment required."
+            prevention = ["Improve canopy ventilation through pruning", "Avoid overhead irrigation late in the day", "Use resistant cultivars in next season"]
+        elif "rust" in norm:
+            chem = "Propiconazole 25% EC @ 1 ml/L or Tebuconazole 250 EC."
+            bio = "Bacillus subtilis (Serenade ASO) @ 4 ml/L."
+            pathogen = "Puccinia spp. (Obligate Biotrophic Rust)"
+            drone = "50 m quarantine buffer spray at 4 m altitude."
+            summary = f"Rust pustules on {crop_str}. High spore load under current humidity."
+            prevention = ["Scout fields weekly during humid periods", "Apply preventative strobilurin fungicide", "Eliminate volunteer host plants from field boundaries"]
+        elif "spot" in norm or "septoria" in norm:
+            chem = "Copper Oxychloride 50% WP @ 3 g/L or Chlorothalonil 75% WP."
+            bio = "Pseudomonas fluorescens @ 5 g/L foliar spray."
+            pathogen = "Cercospora / Septoria spp. (Foliar Spot Pathogen)"
+            drone = "0.5 m/s scan speed at 3 m altitude to monitor lesion expansion."
+            summary = f"Necrotic leaf spots across {crop_str}. Risk of premature defoliation."
+            prevention = ["Rotate crops to break disease cycle", "Use certified disease-free seed", "Maintain balanced nitrogen fertilisation"]
+        elif "virus" in norm or "mosaic" in norm:
+            chem = "Vector control: Imidacloprid 17.8% SL @ 0.5 ml/L or Acetamiprid 20% SP."
+            bio = "Beauveria bassiana @ 5 g/L + yellow sticky trap deployment."
+            pathogen = "Begomovirus / Tobamovirus (Viral Mosaic Complex)"
+            drone = "GPS-mark infected coordinates for physical rogueing operations."
+            summary = f"Viral mosaic on {crop_str}. Immediate vector suppression critical."
+            prevention = ["Rogue and destroy visibly infected plants", "Control aphid and whitefly vectors aggressively", "Use virus-indexed planting material only"]
+        else:
+            chem = "No chemical treatment required. Maintain micronutrient schedule."
+            bio = "Preventative seaweed extract + beneficial microorganism soil drench."
+            pathogen = "None (Healthy Crop)"
+            drone = "Routine surveillance every 72 hours."
+            summary = f"{crop_str} canopy is in robust health. Continue monitoring."
+            prevention = ["Maintain regular UAV surveillance flights", "Keep soil pH optimised for crop", "Monitor weather forecasts for disease-risk conditions"]
+
+        return {
+            "ai_engine": "Jatayu Agronomic Neural Engine (Fallback)",
+            "crop": crop_str,
+            "health_score": round(health_score, 1),
+            "risk_level": risk_level,
+            "risk_color": risk_color,
+            "yield_impact": yield_impact,
+            "executive_summary": summary,
+            "diagnosis_verification_score": int(mean_conf * 100) if mean_conf else 75,
+            "primary_pathogen": pathogen,
+            "chemical_prescription": chem,
+            "biological_remedy": bio,
+            "prevention_steps": prevention,
+            "drone_action_plan": drone,
+            "farmer_advisory": summary.split(".")[0] + ". Consult your local agronomist.",
+        }

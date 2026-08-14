@@ -30,18 +30,20 @@ export default function MissionHeader({
 
   const modelColor = modelStatus.ready
     ? (modelStatus.mock_mode ? "#3B82F6" : "#10B981")
-    : "#FF2D95";
+    : "#EF4444";
 
   return (
     <header className={styles.header}>
       {/* ── LEFT: Brand ── */}
       <div className={styles.brand}>
-        <svg width="28" height="28" viewBox="0 0 32 32" fill="none">
-          <polygon points="16,2 30,26 2,26" stroke="#00F0FF" strokeWidth="1.8"
-            fill="rgba(0,240,255,0.12)" strokeLinejoin="round"/>
-          <circle cx="16" cy="18" r="3.5" fill="#00F0FF"/>
-          <line x1="16" y1="2" x2="16" y2="10" stroke="#00F0FF" strokeWidth="1.2" strokeDasharray="2 2"/>
-        </svg>
+        <div className={styles.logoWrap}>
+          <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
+            <polygon points="16,2 30,26 2,26" stroke="#38BDF8" strokeWidth="2.2"
+              fill="rgba(56,189,248,0.15)" strokeLinejoin="round"/>
+            <circle cx="16" cy="18" r="3.5" fill="#38BDF8"/>
+            <line x1="16" y1="2" x2="16" y2="10" stroke="#38BDF8" strokeWidth="1.5" strokeDasharray="2 2"/>
+          </svg>
+        </div>
         <div>
           <div className={styles.title}>PROJECT JATAYU</div>
           <div className={styles.subtitle}>ENTERPRISE MISSION CONTROL PLATFORM</div>
@@ -62,15 +64,16 @@ export default function MissionHeader({
         <div className={styles.separator}/>
         <div className={styles.missionId}>
           <span className={styles.idLabel}>STATUS</span>
-          <span className={styles.idValue} style={{ color: "#00F0FF" }}>
+          <span className={styles.statusBadge}>
+            <span className={styles.statusDot}/>
             {mission.status.toUpperCase()}
           </span>
         </div>
         <div className={styles.separator}/>
         <div className={styles.missionId}>
           <span className={styles.idLabel}>NEURAL MODEL</span>
-          <span className={styles.modelDot} style={{ background: modelColor }}/>
-          <span className={styles.idValue} style={{ color: modelColor, fontSize: "11px" }}>
+          <span className={styles.modelDot} style={{ background: modelColor, boxShadow: `0 0 8px ${modelColor}` }}/>
+          <span className={styles.idValue} style={{ color: modelColor, fontSize: "12px" }}>
             {modelStatus.ready
               ? (modelStatus.mock_mode ? "MOCK ENGINE" : `${modelStatus.model_name.toUpperCase()} (${modelStatus.device})`)
               : "INITIALIZING…"}
@@ -78,12 +81,12 @@ export default function MissionHeader({
         </div>
       </div>
 
-      {/* ── RIGHT: Drone Telemetry ── */}
+      {/* ── RIGHT: Telemetry ── */}
       <div className={styles.telemetry}>
         {/* Real-time UTC Clock */}
         <div className={styles.telItem} title="System Clock">
-          <Clock size={13} color="#00F0FF"/>
-          <span className={styles.telNum} style={{ minWidth: "80px", color: "#FFFFFF" }}>
+          <Clock size={13} color="#38BDF8"/>
+          <span className={styles.telNum} style={{ minWidth: "80px", color: "#F8FAFC" }}>
             {timeStr || "--:--:-- UTC"}
           </span>
         </div>

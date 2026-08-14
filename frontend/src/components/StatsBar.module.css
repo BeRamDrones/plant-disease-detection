@@ -1,12 +1,10 @@
 .bar {
   display: flex; align-items: center;
   padding: 10px 24px;
-  height: 52px;
-  background: #121824;
-  border-top: 1px solid var(--border);
-  backdrop-filter: blur(16px);
+  height: 50px;
+  background: var(--swatch-panel);
+  border-top: 1px solid var(--swatch-hover);
   flex-shrink: 0; gap: 0;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 .statBlock {
   display: flex; align-items: center; gap: 12px;
@@ -15,12 +13,12 @@
 }
 .statContent { display: flex; flex-direction: column; gap: 2px; }
 .statLabel {
-  font-family: var(--font-hud); font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
-  color: var(--text-muted); text-transform: uppercase;
+  font-family: var(--font-sans); font-size: 10px; font-weight: 600; letter-spacing: 0.04em;
+  color: var(--swatch-light); text-transform: uppercase;
 }
 .statValue {
-  font-family: var(--font-mono); font-size: 17px; font-weight: 800; letter-spacing: 0.04em;
+  font-family: var(--font-mono); font-size: 15px; font-weight: 700; letter-spacing: 0.02em;
   line-height: 1;
-  color: #FFFFFF;
+  color: var(--text-primary);
 }
-.divider { width: 1px; height: 28px; background: var(--border); flex-shrink: 0; }
+.divider { width: 1px; height: 28px; background: var(--swatch-hover); flex-shrink: 0; }

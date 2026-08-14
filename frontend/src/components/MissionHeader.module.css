@@ -4,24 +4,14 @@
   align-items: center;
   justify-content: space-between;
   padding: 0 24px;
-  height: 56px;
-  background: rgba(16, 14, 29, 0.9);
-  border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(24px);
+  height: 54px;
+  background: linear-gradient(180deg, #151C2A 0%, #101622 100%);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
   position: relative;
   z-index: 20;
   gap: 24px;
-}
-
-/* Subtle bottom glow line */
-.header::after {
-  content: "";
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg, transparent 0%, rgba(0, 240, 255, 0.4) 50%, transparent 100%);
-  pointer-events: none;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
 
 /* ── Brand ── */
@@ -31,15 +21,24 @@
   gap: 12px;
   flex-shrink: 0;
 }
+.logoWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 8px;
+  background: rgba(56, 189, 248, 0.08);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
+}
 .title {
-  font-family: var(--font-hud);
-  font-size: 17px; font-weight: 800; letter-spacing: 0.18em;
-  color: var(--cyan);
-  text-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+  font-family: var(--font-sans);
+  font-size: 15px; font-weight: 800; letter-spacing: 0.04em;
+  color: #F8FAFC;
 }
 .subtitle {
-  font-family: var(--font-hud);
-  font-size: 10px; font-weight: 600; letter-spacing: 0.22em;
+  font-family: var(--font-sans);
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
   color: var(--text-muted);
   margin-top: 1px;
 }
@@ -60,18 +59,38 @@
 }
 .separator {
   width: 1px; height: 20px;
-  background: var(--border);
+  background: var(--border-subtle);
   flex-shrink: 0;
 }
 .idLabel {
-  font-family: var(--font-hud);
-  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  font-family: var(--font-sans);
+  font-size: 11px; font-weight: 600; letter-spacing: 0.04em;
   color: var(--text-muted);
 }
 .idValue {
   font-family: var(--font-mono);
-  font-size: 14px; font-weight: 700; letter-spacing: 0.08em;
-  color: #FFFFFF;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+.statusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(56, 189, 248, 0.1);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: #38BDF8;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.statusDot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: #38BDF8;
+  box-shadow: 0 0 6px #38BDF8;
+  animation: pulse-dot 1.5s ease-in-out infinite;
 }
 .modelDot {
   width: 8px; height: 8px; border-radius: 50%;
@@ -93,36 +112,15 @@
 }
 .telDivider {
   width: 1px; height: 18px;
-  background: var(--border);
+  background: var(--border-subtle);
 }
-.telVal { display: flex; align-items: baseline; gap: 3px; }
 .telNum {
   font-family: var(--font-mono);
-  font-size: 15px; font-weight: 700; letter-spacing: 0.04em;
-  color: #FFFFFF;
+  font-size: 14px; font-weight: 700;
+  color: var(--text-primary);
 }
 .telUnit {
   font-family: var(--font-mono);
-  font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  font-size: 11px; font-weight: 600;
   color: var(--text-muted);
-}
-.telSmall {
-  font-family: var(--font-mono);
-  font-size: 12px; font-weight: 700; letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  min-width: 28px;
-}
-
-.bars { display: flex; align-items: flex-end; gap: 2px; }
-.bar  { width: 3px; border-radius: 1px; transition: background 0.3s; }
-
-.batOuter {
-  width: 36px; height: 8px; border-radius: 2px;
-  background: #24204A;
-  border: 1px solid rgba(0, 240, 255, 0.2);
-  overflow: hidden;
-}
-.batInner {
-  height: 100%; border-radius: 1px;
-  transition: width 0.5s ease, background 0.3s;
 }
