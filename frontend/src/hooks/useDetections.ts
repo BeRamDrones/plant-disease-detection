@@ -18,6 +18,11 @@ export interface RawDetection {
   child_status?: string;
   rank?: number;        // classification rank: 1 = top prediction
   grid_zone?: string;
+  vlm_verdict?: string;
+  vlm_reasoning?: string;
+  pathogen_name?: string;
+  severity?: string;
+  ai_audited?: boolean;
 }
 
 let _counter = 1;
@@ -48,6 +53,11 @@ function mapDetection(raw: RawDetection, droneLat: number, droneLon: number): De
     parent_confidence: raw.parent_confidence,
     parent_model:      raw.parent_model,
     child_status:      raw.child_status,
+    vlm_verdict:       raw.vlm_verdict,
+    vlm_reasoning:     raw.vlm_reasoning,
+    pathogen_name:     raw.pathogen_name,
+    severity:          raw.severity,
+    ai_audited:        raw.ai_audited,
   };
 }
 

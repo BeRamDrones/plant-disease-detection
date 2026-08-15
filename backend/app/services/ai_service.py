@@ -19,12 +19,21 @@ logger = logging.getLogger("app.services.ai_service")
 GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
 
 
+ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Env helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _get_groq_key() -> str:
     return os.getenv("GROQ_API_KEY", "").strip()
+
+def set_groq_key(key: str) -> bool:
+    clean_key = key.strip()
+    os.environ["GROQ_API_KEY"] = clean_key
+    _persist_env({"GROQ_API_KEY": clean_key})
+    logger.info(f"[AIService] GROQ_API_KEY updated (length: {len(clean_key)})")
+    return True
 
 def _get_vlm_model() -> str:
     return os.getenv("GROQ_VLM_MODEL", "qwen/qwen3-32b").strip()

@@ -168,16 +168,60 @@ async def awaken_child(crop_name: str):
     }
 
 
-@router.post("/unload-children")
-async def unload_children():
+from pydantic import BaseModel
+from typing import Optional
+from app.services.ai_service import VLMAuditService, AIService, _get_groq_key, _get_vlm_model, _get_report_model, set_groq_key
+
+
+class AuditRequest(BaseModel):
+    crop: str
+    detected_class: str
+    confidence: float
+    zone: Optional[str] = None
+    extra_context: Optional[str] = None
+    image_base64: Optional[str] = None
+
+
+class GroqKeyRequest(BaseModel):
+    api_key: str
+
+
+@router.get("/groq-status")
+async def groq_status():
+    key = _get_groq_key()
+    return {
+        "configured": bool(key),
+        "masked_key": f"{key[:6]}...{key[-4:]}" if len(key) >= 10 else ("***" if key else "Not Configured"),
+        "vlm_model": _get_vlm_model(),
+        "report_model": _get_report_model(),
+    }
+
+
+@router.post("/set-groq-key")
+async def update_groq_key(req: GroqKeyRequest):
+    set_groq_key(req.api_key)
+    key = _get_groq_key()
+    return {
+        "status": "ok",
+        "configured": bool(key),
+        "message": "Groq API key updated successfully! AI LLM & VLM reasoning is active.",
+    }
+
+
+@router.post("/audit-detection")
+async def audit_detection(req: AuditRequest):
     """
-    Resets loaded child models back to STANDBY.
-    Useful for demonstration resets.
+    Groq VLM / LLM real-time audit & precision agronomic verification.
     """
-    child_reg = ChildModelRegistry.get()
-    count = len(child_reg._loaded_models)
-    child_reg._loaded_models.clear()
-    return {"status": "unloaded", "count_unloaded": count}
+    return VLMAuditService.audit_detection(
+        crop=req.crop,
+        detected_class=req.detected_class,
+        confidence=req.confidence,
+        zone=req.zone,
+        extra_context=req.extra_context,
+        image_base64=req.image_base64,
+    )
+
 
 
 

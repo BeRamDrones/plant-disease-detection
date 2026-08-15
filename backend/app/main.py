@@ -26,19 +26,19 @@ async def lifespan(app: FastAPI):
     Loads the parent model (ParentModel.pt) before the server starts accepting
     requests, so the frontend's model-status poll resolves quickly.
     """
-    logger.info("=" * 60)
+    logger.info("==" * 30)
     logger.info("Project Jatayu — starting up")
-    logger.info("Loading parent model (ParentModel.pt)…")
+    logger.info("Loading parent model ensemble from Parent_Models/ …")
 
     registry = ModelRegistry.get()
-    success = registry.load("ParentModel.pt")
+    success = registry.load()
 
     if success:
-        logger.info("✓ Parent model ready — accepting inference requests")
+        logger.info(f"✓ Parent ensemble ready ({registry.model_name}) — accepting inference requests")
     else:
         logger.warning("⚠ Model load encountered issues — running in Mock Mode")
 
-    logger.info("=" * 60)
+    logger.info("==" * 30)
 
     yield  # Application is running
 

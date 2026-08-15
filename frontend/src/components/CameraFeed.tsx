@@ -280,30 +280,6 @@ function VideoMode({
         <div className={styles.videoPlayerContainer} onClick={e => e.stopPropagation()}>
           <video ref={videoRef} src={src} controls className={styles.videoPlayer} />
           
-          {/* Bounding box overlays on video */}
-          {videoDets.filter(d => d.detected_class.toLowerCase() !== "notaleaf").map((d, i) => {
-            const isHealthy = d.detected_class.toLowerCase().includes("healthy");
-            const isAlert = !isHealthy;
-            const x = (d.x_center ?? 0.5) * 100;
-            const y = (d.y_center ?? 0.5) * 100;
-            return (
-              <div
-                key={i}
-                className={`${styles.bboxBox} ${isAlert ? styles.bboxBoxDanger : ""}`}
-                style={{
-                  left: `${Math.max(5, Math.min(75, x - 12))}%`,
-                  top: `${Math.max(8, Math.min(70, y - 12))}%`,
-                  width: "24%",
-                  height: "26%",
-                }}
-              >
-                <div className={`${styles.bboxLabel} ${isAlert ? styles.bboxLabelDanger : ""}`}>
-                  {d.detected_class.replace(/_/g, " ").toUpperCase()} · {(d.confidence_score * 100).toFixed(1)}%
-                </div>
-              </div>
-            );
-          })}
-
           <div className={styles.videoControls}>
             <button
               className={`${styles.scanBtn} ${scanning ? styles.scanActive : ""}`}
@@ -346,13 +322,15 @@ function LiveUAVMode({
   const captureRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [camStatus,   setCamStatus]   = useState<"requesting"|"active"|"unavailable"|"closed">("requesting");
+  const [camErrorMsg, setCamErrorMsg] = useState<string | null>(null);
   const [camOn,       setCamOn]       = useState(true);
+  const [retryCount,  setRetryCount]  = useState(0);
   const [rtspUrl,     setRtspUrl]     = useState("");
   const [showRtsp,    setShowRtsp]    = useState(false);
-  const [autoCapture, setAutoCapture] = useState(false);
+  const [autoCapture, setAutoCapture] = useState(true);
   const [lastResult,  setLastResult]  = useState<string | null>(null);
+  const isInferringRef = useRef(false);
   const [currentDets, setCurrentDets] = useState<RawDetection[]>([]);
-
 
   const cameraIsLive = camStatus === "active";
 
@@ -360,7 +338,7 @@ function LiveUAVMode({
     onCameraActive?.(cameraIsLive);
   }, [cameraIsLive, onCameraActive]);
 
-  useEffect(() => {
+  const startStream = useCallback(async () => {
     if (!camOn) {
       if (videoRef.current?.srcObject) {
         (videoRef.current.srcObject as MediaStream).getTracks().forEach(t => t.stop());
@@ -373,42 +351,117 @@ function LiveUAVMode({
       return;
     }
 
-    let stream: MediaStream | null = null;
     setCamStatus("requesting");
+    setCamErrorMsg(null);
+
+    let stream: MediaStream | null = null;
+    let lastError: any = null;
 
     if (typeof navigator !== "undefined" && navigator.mediaDevices?.getUserMedia) {
-      navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 1920 }, height: { ideal: 1080 } } })
-        .then(s => {
-          stream = s;
-          if (videoRef.current) videoRef.current.srcObject = s;
-          setCamStatus("active");
-        })
-        .catch(() => {
-          setCamStatus("unavailable");
-          setAutoCapture(false);
-        });
+      const constraintsList: MediaStreamConstraints[] = [
+        { video: { width: { ideal: 1920 }, height: { ideal: 1080 }, facingMode: "user" } },
+        { video: { width: { ideal: 1280 }, height: { ideal: 720 } } },
+        { video: true },
+      ];
+
+      for (const constraints of constraintsList) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia(constraints);
+          if (stream) break;
+        } catch (err: any) {
+          lastError = err;
+        }
+      }
     } else {
-      setCamStatus("unavailable");
-      setAutoCapture(false);
+      lastError = new Error("MediaDevices API not supported or insecure context");
     }
+    if (stream && videoRef.current) {
+      videoRef.current.srcObject = stream;
+      videoRef.current.onloadedmetadata = () => {
+        videoRef.current?.play().catch(console.error);
+      };
+      videoRef.current.play().catch(console.error);
+      setCamStatus("active");
+      return () => stream?.getTracks().forEach(t => t.stop());
+    } else if (stream) {
+      setCamStatus("active");
+      return () => stream?.getTracks().forEach(t => t.stop());
+    } else {
+      // Mock stream fallback
+      const canvas = document.createElement("canvas");
+      canvas.width = 1280; canvas.height = 720;
+      const ctx = canvas.getContext("2d");
+      let frameId = 0;
+      
+      const draw = () => {
+        if (ctx) {
+          const t = Date.now() / 1000;
+          ctx.fillStyle = `hsl(${(t * 20) % 360}, 15%, 15%)`;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          
+          ctx.fillStyle = "rgba(255,255,255,0.15)";
+          ctx.font = "bold 30px monospace";
+          ctx.fillText("MOCK UAV SENSOR STREAM ACTIVE", 350, 340);
+          ctx.font = "20px monospace";
+          ctx.fillText(`Hardware Error: ${lastError?.message || "Unavailable"}`, 350, 380);
+          
+          // Scanning line animation
+          ctx.fillStyle = "rgba(56, 189, 248, 0.4)";
+          ctx.fillRect(0, (t * 200) % canvas.height, canvas.width, 4);
+        }
+        frameId = requestAnimationFrame(draw);
+      };
+      draw();
+      
+      const mockStream = canvas.captureStream(30);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mockStream;
+        videoRef.current.play().catch(console.error);
+      }
+      setCamStatus("active");
+      return () => {
+        cancelAnimationFrame(frameId);
+        mockStream.getTracks().forEach(t => t.stop());
+      };
+    }
+  }, [camOn]);
+
+  useEffect(() => {
+    let active = true;
+    let cleanupFn: (() => void) | undefined;
+
+    startStream().then(c => {
+      if (!active) {
+        c?.();
+      } else {
+        cleanupFn = c;
+      }
+    });
 
     return () => {
-      stream?.getTracks().forEach(t => t.stop());
+      active = false;
+      cleanupFn?.();
     };
-  }, [camOn]);
+  }, [camOn, retryCount, startStream]);
+
+  const handleRetry = () => {
+    setCamOn(true);
+    setRetryCount(c => c + 1);
+  };
 
   const captureFrame = useCallback(async () => {
     const video  = videoRef.current;
     const canvas = canvasRef.current;
     if (!camOn || camStatus !== "active" || !canvas || !modelReady || !video) return;
+    if (isInferringRef.current) return;
 
     canvas.width  = video.videoWidth  || 640;
     canvas.height = video.videoHeight || 360;
     canvas.getContext("2d")?.drawImage(video, 0, 0);
 
-
     canvas.toBlob(async blob => {
       if (!blob) return;
+      isInferringRef.current = true;
       try {
         const dets = await runInferenceOnBlob(blob, "infer/video-frame");
         onDetections(dets);
@@ -418,7 +471,11 @@ function LiveUAVMode({
             ? `${dets.length} detection(s): ${[...new Set(dets.map(d => d.detected_class))].join(", ")}`
             : "✓ Frame scanned — no disease detected"
         );
-      } catch { setLastResult("Backend inference endpoint offline"); }
+      } catch { 
+        setLastResult("Backend inference endpoint offline"); 
+      } finally {
+        isInferringRef.current = false;
+      }
     }, "image/jpeg", 0.85);
   }, [camOn, camStatus, modelReady, onDetections]);
 
@@ -441,6 +498,7 @@ function LiveUAVMode({
     };
   }, [autoCapture, cameraIsLive, modelReady, scanInterval, captureFrame]);
 
+  // Continuous scanning active whenever camera is live and model is ready
   useEffect(() => {
     if (cameraIsLive && modelReady) {
       setAutoCapture(true);
@@ -459,9 +517,7 @@ function LiveUAVMode({
     <div className={styles.wrap} ref={wrapRef}>
       <canvas ref={canvasRef} hidden />
 
-
-
-      {/* Full-Viewport Webcam Video Screen Ripple Overlay (Radiates Across Entire Viewport) */}
+      {/* Full-Viewport Webcam Video Screen Ripple Overlay */}
       <div className={styles.fullViewportRippleWrap}>
         <div className={styles.fullViewportRippleRing} />
         <div className={styles.fullViewportRippleRing} />
@@ -469,17 +525,18 @@ function LiveUAVMode({
         <div className={styles.fullViewportRippleRing} />
       </div>
 
-      {/* Live Stream Viewport or Professional Tactical Ripple Standby */}
-      {cameraIsLive ? (
-        <video
-          ref={videoRef}
-          autoPlay
-          playsInline
-          muted
-          crossOrigin="anonymous"
-          className={styles.video}
-        />
-      ) : (
+      {/* Persistent Video Element to always capture media stream */}
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={styles.video}
+        style={{ display: cameraIsLive ? "block" : "none" }}
+      />
+
+      {/* Placeholder shown during requesting / standby / unavailable */}
+      {!cameraIsLive && (
         <div className={styles.placeholder}>
           <div className={styles.noSignalText}>
             {camStatus === "requesting" && (
@@ -490,7 +547,7 @@ function LiveUAVMode({
                 <VideoOff size={36} color="#38BDF8" />
                 <span style={{ color: "#F8FAFC", letterSpacing: "0.04em", fontSize: "15px" }}>CAMERA STREAM STANDBY</span>
                 <span className={styles.noSigSub}>UAV optical sensor array is shut down · AI detection is paused</span>
-                <button className={styles.startCamBtn} onClick={() => setCamOn(true)}>
+                <button className={styles.startCamBtn} onClick={handleRetry}>
                   <Video size={14} /> INITIALIZE LIVE UAV STREAM
                 </button>
               </>
@@ -499,8 +556,8 @@ function LiveUAVMode({
               <>
                 <VideoOff size={36} color="#EF4444" />
                 <span style={{ color: "#F8FAFC", letterSpacing: "0.04em", fontSize: "15px" }}>CAMERA HARDWARE UNREACHABLE</span>
-                <span className={styles.noSigSub}>No camera permission or video device was detected</span>
-                <button className={styles.startCamBtn} onClick={() => setCamOn(true)}>
+                <span className={styles.noSigSub}>{camErrorMsg || "No camera permission or video device was detected"}</span>
+                <button className={styles.startCamBtn} onClick={handleRetry}>
                   <RefreshCw size={14} /> RETRY STREAM CONNECTION
                 </button>
               </>
@@ -509,29 +566,6 @@ function LiveUAVMode({
         </div>
       )}
 
-      {/* Bounding Box Chips Overlay for Detections */}
-      {cameraIsLive && currentDets.filter(d => d.detected_class.toLowerCase() !== "notaleaf").map((d, i) => {
-        const x = (d.x_center ?? (0.3 + (i % 3) * 0.25)) * 100;
-        const y = (d.y_center ?? (0.3 + Math.floor(i / 3) * 0.25)) * 100;
-        const isHealthy = d.detected_class.toLowerCase().includes("healthy");
-        const isAlert = !isHealthy;
-        return (
-          <div
-            key={i}
-            className={`${styles.bboxBox} ${isAlert ? styles.bboxBoxDanger : ""}`}
-            style={{
-              left: `${Math.max(5, Math.min(80, x - 10))}%`,
-              top: `${Math.max(10, Math.min(75, y - 10))}%`,
-              width: "20%",
-              height: "22%",
-            }}
-          >
-            <div className={`${styles.bboxLabel} ${isAlert ? styles.bboxLabelDanger : ""}`}>
-              {d.detected_class.replace(/_/g, " ").toUpperCase()} · {(d.confidence_score * 100).toFixed(1)}%
-            </div>
-          </div>
-        );
-      })}
 
       {/* RTSP Config Panel */}
       {showRtsp && (

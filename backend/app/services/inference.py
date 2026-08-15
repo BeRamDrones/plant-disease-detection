@@ -7,24 +7,43 @@ from typing import Dict, Any, List, Optional
 logger = logging.getLogger("app.services.inference")
 
 # ---------------------------------------------------------------------------
-# Path resolution: backend root, weights subfolder, and Child_Models directory
+# Path resolution
 # ---------------------------------------------------------------------------
-_BASE_DIR        = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-WEIGHTS_DIR      = os.path.join(_BASE_DIR, "weights")
-CHILD_MODELS_DIR = os.path.join(_BASE_DIR, "Child_Models")
+_BASE_DIR         = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+WEIGHTS_DIR       = os.path.join(_BASE_DIR, "weights")
+CHILD_MODELS_DIR  = os.path.join(_BASE_DIR, "Child_Models")
+_PROJECT_ROOT     = os.path.abspath(os.path.join(_BASE_DIR, ".."))           # e:\Project Jatayu\
+PARENT_MODELS_DIR = os.path.join(_PROJECT_ROOT, "Parent_Models")             # e:\Project Jatayu\Parent_Models\
 
 
-def _resolve_model_path(filename: str) -> Optional[str]:
+def _discover_parent_models() -> List[Dict[str, str]]:
     """
-    Searches for a .pt file in priority order:
-      1. backend/ root  (e.g. backend/best.pt)
-      2. backend/weights/ subfolder
-    Returns the first path that exists, or None.
+    Scans Parent_Models/ for subdirectories containing best.pt weights.
+    Returns a list of dicts: {name, path} sorted by folder name.
+    Falls back to legacy backend/ParentModel.pt if Parent_Models/ is absent.
     """
-    for path in [os.path.join(_BASE_DIR, filename), os.path.join(WEIGHTS_DIR, filename)]:
-        if os.path.exists(path):
-            return path
-    return None
+    entries = []
+    if os.path.isdir(PARENT_MODELS_DIR):
+        for folder in sorted(os.listdir(PARENT_MODELS_DIR)):
+            folder_path = os.path.join(PARENT_MODELS_DIR, folder)
+            if not os.path.isdir(folder_path):
+                continue
+            # Look for best.pt anywhere inside
+            for root, _dirs, files in os.walk(folder_path):
+                if "best.pt" in files:
+                    entries.append({
+                        "name": folder,
+                        "path": os.path.join(root, "best.pt"),
+                    })
+                    break
+
+    if not entries:
+        # Fallback to legacy single model
+        legacy = os.path.join(_BASE_DIR, "ParentModel.pt")
+        if os.path.exists(legacy):
+            entries.append({"name": "ParentModel", "path": legacy})
+
+    return entries
 
 
 def _best_device() -> str:
@@ -149,24 +168,26 @@ class ChildModelRegistry:
 
 
 # ---------------------------------------------------------------------------
-# ModelRegistry — singleton that tracks load state for Parent Model (best.pt)
+# ModelRegistry — dual parent model ensemble (Parent1 + Parent2)
 # ---------------------------------------------------------------------------
 class ModelRegistry:
     """
-    Singleton registry. Call `get()` to obtain the shared instance.
-    Loads the parent model (ParentModel.pt) onto the best available device.
+    Singleton registry for the dual parent model ensemble.
+    Loads ALL models found in Parent_Models/ at startup.
+    Ensemble: both models run per frame; the highest-confidence
+    non-NotALeaf prediction wins.
     """
     _instance: Optional["ModelRegistry"] = None
 
     def __init__(self):
-        self.is_ready: bool           = False
-        self.model_name: str          = "ParentModel.pt"
-        self.loaded_at: Optional[str] = None
-        self.device: str              = "cpu"
-        self.model_task: str          = "unknown"  # 'classify' | 'detect' | 'segment'
-        self._model                   = None
+        self.is_ready: bool            = False
+        self.model_name: str           = "ParentEnsemble"  # display label
+        self.loaded_at: Optional[str]  = None
+        self.device: str               = "cpu"
+        self.model_task: str           = "classify"
+        self._models: List[Dict[str, Any]] = []  # [{name, path, model, classes}]
         self._torch_available: bool    = False
-        self._mock_mode: bool         = False
+        self._mock_mode: bool          = False
 
         try:
             import ultralytics  # noqa: F401
@@ -178,19 +199,22 @@ class ModelRegistry:
                 "Run: pip install ultralytics torch torchvision"
             )
 
+    # Keep _model property for backwards-compatible checks in pipeline
+    @property
+    def _model(self):
+        return self._models[0]["model"] if self._models else None
+
     @classmethod
     def get(cls) -> "ModelRegistry":
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
 
-    def load(self, parent_model_filename: str = "ParentModel.pt") -> bool:
+    def load(self, _unused: str = "ParentModel.pt") -> bool:
         """
-        Loads the parent YOLO model onto the best available device (GPU first).
-        Must be called once at application startup via the lifespan event.
+        Discovers and loads all parent models from Parent_Models/.
+        Called once at application startup.
         """
-        self.model_name = parent_model_filename
-
         if not self._torch_available:
             logger.info("[ModelRegistry] PyTorch/ultralytics not available — enabling Mock Mode.")
             self._mock_mode = True
@@ -198,40 +222,160 @@ class ModelRegistry:
             self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
             return True
 
-        model_path = _resolve_model_path(parent_model_filename)
-        if model_path is None:
-            logger.warning(
-                f"[ModelRegistry] '{parent_model_filename}' not found in "
-                f"'{_BASE_DIR}' or '{WEIGHTS_DIR}'. Falling back to Mock Mode."
-            )
+        entries = _discover_parent_models()
+        if not entries:
+            logger.warning("[ModelRegistry] No parent models found anywhere — enabling Mock Mode.")
             self._mock_mode = True
             self.is_ready   = True
             self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
             return True
 
         self.device = _best_device()
+        success = False
 
         try:
             from ultralytics import YOLO
-            logger.info(f"[ModelRegistry] Loading YOLO parent model: {model_path} → device={self.device}")
-            self._model     = YOLO(model_path)
-            self.model_task = getattr(self._model, "task", "unknown")
-            self._model.to(self.device)
+            for entry in entries:
+                try:
+                    logger.info(f"[ModelRegistry] Loading parent model '{entry['name']}': {entry['path']} → {self.device}")
+                    model = YOLO(entry["path"])
+                    model.to(self.device)
+                    self._models.append({
+                        "name":    entry["name"],
+                        "path":    entry["path"],
+                        "model":   model,
+                        "task":    getattr(model, "task", "classify"),
+                        "classes": model.names,
+                    })
+                    logger.info(
+                        f"[ModelRegistry] ✓ '{entry['name']}' ready — "
+                        f"task={getattr(model, 'task', 'classify')}, "
+                        f"classes={len(model.names)}: {list(model.names.values())}"
+                    )
+                    success = True
+                except Exception as exc:
+                    logger.error(f"[ModelRegistry] Failed to load '{entry['name']}': {exc}")
 
-            self.is_ready  = True
-            self.loaded_at = datetime.datetime.utcnow().isoformat() + "Z"
-            logger.info(
-                f"[ModelRegistry] ✓ Parent model ready — "
-                f"file={parent_model_filename}, task={self.model_task}, device={self.device}"
-            )
-            return True
+            self.model_name = " + ".join(m["name"] for m in self._models)
+            self.model_task = "classify"
+            self.is_ready   = True
+            self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
+            logger.info(f"[ModelRegistry] ✓ Ensemble ready — {len(self._models)} parent model(s) loaded.")
+            return success
 
         except Exception as exc:
-            logger.error(f"[ModelRegistry] Failed to load parent model '{model_path}': {exc}", exc_info=True)
+            logger.error(f"[ModelRegistry] Critical failure loading parent models: {exc}", exc_info=True)
             self._mock_mode = True
             self.is_ready   = True
             self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
             return False
+
+    def cascade_classify(self, image_path: str) -> Optional[Dict[str, Any]]:
+        """
+        Dual parent model ensemble sequential cascade:
+          1. Brightness / Blank Frame Gate: Discard blank or dark frames (< 15.0 brightness).
+          2. Parent1 (32 crops + NotALeaf) Primary Gate:
+             - If Parent1 top prediction is NotALeaf (>= 25% conf), reject frame as background.
+             - Find top non-NotALeaf crop from Parent1. If conf >= 25% (out of 32 classes), accept it.
+          3. Supplementary Parent2 Gate:
+             - Only consulted if Parent1 has no confident crop and NotALeaf < 25%.
+        """
+        NON_LEAF = {"notaleaf", "background", "unknown", "noleaf"}
+        MIN_CONF = 0.50
+
+        # Step 0: Reject blank or dark frames immediately
+        try:
+            from PIL import Image, ImageStat
+            with Image.open(image_path) as img:
+                stat = ImageStat.Stat(img.convert("L"))
+                mean_brightness = stat.mean[0]
+                if mean_brightness < 15.0:
+                    logger.info(f"[Parent Ensemble] Frame is dark / blank (brightness={mean_brightness:.1f} < 15.0) — skipping.")
+                    return None
+        except Exception:
+            pass
+
+        # Step 1: Run Parent1 (Primary 32-crop model with NotALeaf background detector)
+        parent1_entry = next((m for m in self._models if "parent1" in m["name"].lower()), self._models[0] if self._models else None)
+        if parent1_entry:
+            try:
+                p1_results = parent1_entry["model"](image_path, device=self.device, verbose=False)
+                if p1_results and hasattr(p1_results[0], "probs") and p1_results[0].probs is not None:
+                    p1_r = p1_results[0]
+                    p1_top_idx  = int(p1_r.probs.top5[0])
+                    p1_top_conf = float(p1_r.probs.top5conf[0])
+                    p1_crop     = p1_r.names.get(p1_top_idx, f"class_{p1_top_idx}")
+                    p1_norm     = p1_crop.lower().replace("_", "")
+
+                    p1_top3 = [
+                        f"{p1_r.names.get(int(p1_r.probs.top5[i]))}: {float(p1_r.probs.top5conf[i])*100:.1f}%"
+                        for i in range(min(5, len(p1_r.probs.top5)))
+                    ]
+                    logger.info(f"[Parent Ensemble] 'Parent1' Top Predictions: {', '.join(p1_top3)}")
+
+                    # Gate A: If top prediction is NotALeaf >= 20%, reject background
+                    if p1_norm in NON_LEAF and p1_top_conf >= 0.20:
+                        logger.info(
+                            f"[Parent Ensemble] Parent1 detected '{p1_crop}' ({p1_top_conf*100:.1f}%) "
+                            f"— frame is non-leaf / background, skipping."
+                        )
+                        return None
+
+                    # Gate B: Top crop must be a valid crop with >= 50% confidence
+                    if p1_norm not in NON_LEAF and p1_top_conf >= MIN_CONF:
+                        logger.info(
+                            f"[Parent Ensemble] Parent1 Identified Crop '{p1_crop}' ({p1_top_conf*100:.2f}%)"
+                        )
+                        return {
+                            "crop_name":    p1_crop,
+                            "conf":         p1_top_conf,
+                            "parent_model": parent1_entry["name"],
+                            "num_classes":  len(parent1_entry["classes"]),
+                        }
+            except Exception as exc:
+                logger.warning(f"[Parent Ensemble] Parent1 check error: {exc}")
+
+        # Step 2: Supplementary parent models (e.g. Parent2 for Cauliflower, Rice, Lemon, etc.)
+        for entry in self._models:
+            if "parent1" in entry["name"].lower():
+                continue
+            try:
+                results = entry["model"](image_path, device=self.device, verbose=False)
+                if not results:
+                    continue
+                r = results[0]
+                if not hasattr(r, "probs") or r.probs is None:
+                    continue
+
+                top_idx   = int(r.probs.top5[0])
+                top_conf  = float(r.probs.top5conf[0])
+                crop_name = r.names.get(top_idx, f"class_{top_idx}")
+                norm_name = crop_name.lower().replace("_", "")
+                num_classes = len(entry["classes"])
+
+                top3_info = [
+                    f"{r.names.get(int(r.probs.top5[i]))}: {float(r.probs.top5conf[i])*100:.1f}%"
+                    for i in range(min(3, len(r.probs.top5)))
+                ]
+                logger.info(f"[Parent Ensemble] '{entry['name']}' Supplementary Predictions: {', '.join(top3_info)}")
+
+                # Require high confidence for supplementary models that lack background classes
+                if norm_name not in NON_LEAF and top_conf >= 0.70:
+                    return {
+                        "crop_name":    crop_name,
+                        "conf":         top_conf,
+                        "parent_model": entry["name"],
+                        "num_classes":  num_classes,
+                    }
+            except Exception as exc:
+                logger.warning(f"[Parent Ensemble] '{entry['name']}' error: {exc}")
+
+        logger.info("[Parent Ensemble] No confident crop prediction found — frame skipped.")
+        return None
+
+
+
+
 
     def status(self) -> Dict[str, Any]:
         return {
@@ -242,6 +386,7 @@ class ModelRegistry:
             "device":               self.device,
             "loaded_at":            self.loaded_at,
             "torch_available":      self._torch_available,
+            "parent_models":        [{"name": m["name"], "classes": len(m["classes"])} for m in self._models],
             "loaded_child_models":  ChildModelRegistry.get().loaded_crops(),
         }
 
@@ -311,56 +456,47 @@ class DiseaseDetectionPipeline:
 
     def _real_two_phase_inference(self, image_path: str) -> List[Dict[str, Any]]:
         """
-        Two-phase Parent-to-Child inference implementation:
-          Phase 1: Parent model (best.pt, classify) identifies plant class.
-          Phase 2: On-demand loading of ONLY the child model for that plant class
-                   to run disease detection (detect task).
+        Two-phase inference using the dual parent model ensemble:
+          Phase 1: Both parent models classify the image — best non-NotALeaf
+                   prediction wins (highest confidence across all parents).
+          Phase 2: On-demand child specialist model performs disease detection.
         """
         device = self._registry.device
         logger.info(f"[Two-Phase Inference] Image={image_path} | Device={device}")
 
+        MIN_LEAF_CONF    = 0.50
+        MIN_DISEASE_CONF = 0.45
+
         try:
-            # ── PHASE 1: Parent Model Classification ─────────────────────────────
-            parent_results = self._registry._model(image_path, device=device, verbose=False)
-            if not parent_results or len(parent_results) == 0:
+            # ── PHASE 1: Sequential Cascade Classification ────────────────────────
+            # Parent1 scans first → if no valid crop found, Parent2 is tried
+            best = self._registry.cascade_classify(image_path)
+
+            if best is None:
+                logger.info("[Phase 1] Cascade: all parent models returned NotALeaf / low confidence — skipping frame.")
                 return []
 
-            p_res = parent_results[0]
-            if not hasattr(p_res, "probs") or p_res.probs is None:
-                logger.warning("[Two-Phase Inference] Parent model did not return classification probabilities.")
-                return []
+            crop_name   = best["crop_name"]
+            top_conf    = best["conf"]
+            parent_name = best["parent_model"]
 
-            probs = p_res.probs
-            names = p_res.names
-
-            top5_indices = probs.top5
-            top5_confs   = probs.top5conf
-
-            top_idx  = int(top5_indices[0])
-            top_conf = float(top5_confs[0])
-            crop_name = names.get(top_idx, f"class_{top_idx}")
-            crop_name_clean = crop_name.lower().replace("_", "")
-
-            # Filter non-leaf / low confidence frames (< 50% confidence -> No Leaf)
-            MIN_LEAF_CONF = 0.50
-            MIN_DISEASE_CONF = 0.50
-
-            if top_conf < MIN_LEAF_CONF or crop_name_clean in ["notaleaf", "background", "unknown", "noleaf"]:
+            if top_conf < MIN_LEAF_CONF:
                 logger.info(
-                    f"[Phase 1] Top prediction '{crop_name}' conf={top_conf*100:.1f}% "
-                    f"(< {MIN_LEAF_CONF*100:.0f}%) → evaluated as No Leaf / non-foliage frame, skipping child model."
+                    f"[Phase 1] Best ensemble prediction '{crop_name}' conf={top_conf*100:.1f}% "
+                    f"< {MIN_LEAF_CONF*100:.0f}% — skipping as No Leaf."
                 )
                 return []
 
-            logger.info(f"[Phase 1] Parent classified crop as '{crop_name}' (Confidence: {top_conf*100:.2f}%)")
+            logger.info(
+                f"[Phase 1] Ensemble winner → '{crop_name}' ({top_conf*100:.2f}%) "
+                f"via {parent_name}"
+            )
 
             # ── PHASE 2: Child Model Disease Detection ───────────────────────────
-            # Load ONLY the child model corresponding to the parent's classified crop
             child_model = self._child_registry.get_child_model(crop_name, device)
 
             if child_model is None:
-                # No child model folder available for this crop -> Return parent crop identification
-                logger.info(f"[Phase 2] No child model available for '{crop_name}' → Returning parent crop identification.")
+                logger.info(f"[Phase 2] No child model available for '{crop_name}' → Returning parent identification.")
                 return [{
                     "detected_class":    f"{crop_name}_Healthy",
                     "confidence_score":  round(top_conf, 4),
@@ -368,14 +504,14 @@ class DiseaseDetectionPipeline:
                     "y_center":         0.5,
                     "plant_class":      crop_name,
                     "parent_confidence": round(top_conf, 4),
-                    "parent_model":     "ParentModel.pt",
-                    "model_name":       "ParentModel.pt",
+                    "parent_model":     parent_name,
+                    "model_name":       parent_name,
                     "child_status":     "STANDBY",
                 }]
 
-            # Run child model detection on image with conf=0.50 threshold
             child_model_name = os.path.basename(getattr(child_model, "ckpt_path", f"{crop_name}_best.pt"))
             child_results = child_model(image_path, device=device, conf=MIN_DISEASE_CONF, verbose=False)
+
             if not child_results or len(child_results) == 0:
                 return [{
                     "detected_class":    f"{crop_name}_Healthy",
@@ -384,28 +520,24 @@ class DiseaseDetectionPipeline:
                     "y_center":         0.5,
                     "plant_class":      crop_name,
                     "parent_confidence": round(top_conf, 4),
-                    "parent_model":     "ParentModel.pt",
+                    "parent_model":     parent_name,
                     "model_name":       child_model_name,
                     "child_status":     "AWOKEN (IN MEMORY)",
                 }]
 
-            c_res = child_results[0]
-            boxes = c_res.boxes
+            c_res   = child_results[0]
+            boxes   = c_res.boxes
             c_names = c_res.names
-
             detections: List[Dict[str, Any]] = []
 
             if boxes is not None and len(boxes) > 0:
                 for box in boxes:
-                    cls_idx  = int(box.cls[0])
-                    disease  = c_names.get(cls_idx, f"disease_{cls_idx}")
-                    conf     = float(box.conf[0])
-
-                    if conf < MIN_DISEASE_CONF:  # filter noise below 50%
+                    cls_idx = int(box.cls[0])
+                    disease = c_names.get(cls_idx, f"disease_{cls_idx}")
+                    conf    = float(box.conf[0])
+                    if conf < MIN_DISEASE_CONF:
                         continue
-
                     xywhn = box.xywhn[0].tolist()
-
                     detections.append({
                         "detected_class":    disease,
                         "confidence_score":  round(conf, 4),
@@ -413,14 +545,13 @@ class DiseaseDetectionPipeline:
                         "y_center":         round(xywhn[1], 4),
                         "plant_class":      crop_name,
                         "parent_confidence": round(top_conf, 4),
-                        "parent_model":     "ParentModel.pt",
+                        "parent_model":     parent_name,
                         "model_name":       child_model_name,
                         "child_status":     "AWOKEN (IN MEMORY)",
                     })
 
             if not detections:
-                # Child model ran but found 0 disease bounding boxes above threshold -> Plant is Healthy
-                logger.info(f"[Phase 2] Child model '{crop_name}' found no disease boxes >= {MIN_DISEASE_CONF*100:.0f}% → Plant is Healthy.")
+                logger.info(f"[Phase 2] No disease boxes >= {MIN_DISEASE_CONF*100:.0f}% → Plant is Healthy.")
                 detections.append({
                     "detected_class":    f"{crop_name}_Healthy",
                     "confidence_score":  round(top_conf, 4),
@@ -428,12 +559,33 @@ class DiseaseDetectionPipeline:
                     "y_center":         0.5,
                     "plant_class":      crop_name,
                     "parent_confidence": round(top_conf, 4),
-                    "parent_model":     "ParentModel.pt",
+                    "parent_model":     parent_name,
                     "model_name":       child_model_name,
                     "child_status":     "AWOKEN (IN MEMORY)",
                 })
 
-            logger.info(f"[Phase 2] Child model '{crop_name}' completed → {len(detections)} detection(s) found.")
+            logger.info(f"[Phase 2] '{crop_name}' → {len(detections)} detection(s).")
+
+            # ── Groq VLM Audit Integration (Applies across Image, Video & Live UAV) ──
+            from app.services.ai_service import _get_groq_key, VLMAuditService
+            if _get_groq_key() and detections:
+                for det in detections[:2]:
+                    try:
+                        audit = VLMAuditService.audit_detection(
+                            crop=det.get("plant_class", crop_name),
+                            detected_class=det["detected_class"],
+                            confidence=det["confidence_score"],
+                        )
+                        det["vlm_verdict"]         = audit.get("verdict", "VERIFIED")
+                        det["vlm_reasoning"]       = audit.get("reasoning", "")
+                        det["pathogen_name"]       = audit.get("pathogen_name")
+                        det["severity"]            = audit.get("severity", "MODERATE")
+                        det["ai_audited"]          = audit.get("ai_audited", True)
+                        if "adjusted_confidence" in audit and audit["adjusted_confidence"]:
+                            det["confidence_score"] = float(audit["adjusted_confidence"])
+                    except Exception as _audit_err:
+                        logger.warning(f"[VLM Audit] Skip audit: {_audit_err}")
+
             return detections
 
         except Exception as exc:

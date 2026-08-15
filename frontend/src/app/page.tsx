@@ -8,6 +8,7 @@ import StatsBar from "@/components/StatsBar";
 import CompleteMissionButton from "@/components/CompleteMissionButton";
 import ModelGate from "@/components/ModelGate";
 import ModelsDashboard from "@/components/ModelsDashboard";
+import GroqSettings from "@/components/GroqSettings";
 import InputModeSelector, { InputMode } from "@/components/InputModeSelector";
 import { useMissionDetections } from "@/hooks/useMissionDetections";
 import { useModelStatus } from "@/hooks/useModelStatus";
@@ -480,6 +481,9 @@ export default function MissionDashboard() {
                       Interval rate at which the live stream is processed for disease discovery.
                     </span>
                   </div>
+
+                  {/* Groq AI LLM & VLM Configuration */}
+                  <GroqSettings />
                 </div>
 
                 {/* System Specs and Diagnostics */}

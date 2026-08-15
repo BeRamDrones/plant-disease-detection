@@ -227,7 +227,7 @@ export default function ModelsDashboard() {
 
         <div className={styles.parentFields}>
           <div className={styles.fieldCard}>
-            <span className={styles.fieldLabel}>Model File</span>
+            <span className={styles.fieldLabel}>Ensemble</span>
             <span className={styles.fieldValue}>{parent.model_name}</span>
           </div>
           <div className={styles.fieldCard}>
@@ -255,7 +255,29 @@ export default function ModelsDashboard() {
             </span>
           </div>
         </div>
+
+        {/* Parent model ensemble breakdown */}
+        {parent.parent_models && parent.parent_models.length > 0 && (
+          <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
+            {parent.parent_models.map((pm) => (
+              <div
+                key={pm.name}
+                style={{
+                  display: "flex", alignItems: "center", gap: "6px",
+                  background: "rgba(56,189,248,0.07)", border: "1px solid rgba(56,189,248,0.2)",
+                  borderRadius: "6px", padding: "5px 10px", fontSize: "11px",
+                }}
+              >
+                <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10B981", display: "inline-block", boxShadow: "0 0 4px #10B981" }} />
+                <span style={{ color: "#38BDF8", fontWeight: 700 }}>{pm.name}</span>
+                <span style={{ color: "#64748B" }}>·</span>
+                <span style={{ color: "#94A3B8" }}>{pm.classes} classes</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
 
       {/* ── Child Models Header ── */}
       <div className={styles.childrenHeader}>

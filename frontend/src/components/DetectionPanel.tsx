@@ -94,6 +94,27 @@ function DetectionCard({ det, index }: { det: Detection; index: number }) {
         </div>
       )}
 
+      {/* Groq LLM / VLM Clinical Audit Badge */}
+      {det.vlm_verdict && (
+        <div style={{ margin: "6px 0 2px 0", background: "rgba(56, 189, 248, 0.08)", border: "1px solid rgba(56, 189, 248, 0.25)", borderRadius: "6px", padding: "6px 8px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "2px" }}>
+            <span style={{ color: "#38BDF8", fontWeight: 800, fontSize: "10px", fontFamily: "var(--font-hud)" }}>
+              🤖 GROQ VLM: {det.vlm_verdict}
+            </span>
+            {det.pathogen_name && (
+              <span style={{ color: "#F472B6", fontSize: "10px", fontStyle: "italic", fontWeight: 600 }}>
+                {det.pathogen_name}
+              </span>
+            )}
+          </div>
+          {det.vlm_reasoning && (
+            <div style={{ color: "#CBD5E1", fontSize: "9.5px", lineHeight: "1.3" }}>
+              {det.vlm_reasoning}
+            </div>
+          )}
+        </div>
+      )}
+
       {expanded && (
         <div className={styles.advisoryBox}>
           <div className={styles.advisoryHeader}>

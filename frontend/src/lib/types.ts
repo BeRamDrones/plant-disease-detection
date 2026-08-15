@@ -16,6 +16,11 @@ export interface Detection {
   parent_confidence?: number;
   parent_model?: string;
   child_status?: string;
+  vlm_verdict?: string;
+  vlm_reasoning?: string;
+  pathogen_name?: string;
+  severity?: string;
+  ai_audited?: boolean;
 }
 
 export interface ZoneSummary {

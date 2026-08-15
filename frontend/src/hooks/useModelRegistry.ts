@@ -23,6 +23,7 @@ export interface ParentModelInfo {
   loaded_at: string | null;
   torch_available: boolean;
   loaded_child_models: string[];
+  parent_models?: { name: string; classes: number }[];
 }
 
 export interface ModelRegistryData {
