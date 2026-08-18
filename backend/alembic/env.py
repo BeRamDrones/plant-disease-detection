@@ -62,6 +62,8 @@ def do_run_migrations(connection) -> None:
 async def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     ini_section = config.get_section(config.config_ini_section, {})
+    ini_section["sqlalchemy.url"] = ASYNC_DATABASE_URL
+    print(f"[Alembic] Connecting to target database: {ASYNC_DATABASE_URL}")
     connectable = async_engine_from_config(
         ini_section,
         prefix="sqlalchemy.",
@@ -70,6 +72,7 @@ async def run_migrations_online() -> None:
 
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
+        await connection.commit()
 
     await connectable.dispose()
 

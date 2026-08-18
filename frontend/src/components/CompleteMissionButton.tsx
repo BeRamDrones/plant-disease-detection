@@ -6,7 +6,7 @@ import { Detection, MissionData } from "@/lib/types";
 import { generateMissionSummary } from "@/lib/mockData";
 import { generateMissionPDF } from "@/lib/pdfReport";
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
 interface Props { mission: MissionData; detections: Detection[]; elapsed: number; }
 

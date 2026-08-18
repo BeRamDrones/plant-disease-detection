@@ -12,6 +12,7 @@ import GroqSettings from "@/components/GroqSettings";
 import InputModeSelector, { InputMode } from "@/components/InputModeSelector";
 import { useMissionDetections } from "@/hooks/useMissionDetections";
 import { useModelStatus } from "@/hooks/useModelStatus";
+import { useGroqStatus } from "@/hooks/useGroqStatus";
 import { useDetections, RawDetection } from "@/hooks/useDetections";
 import { generateMissionSummary } from "@/lib/mockData";
 import { diseaseColor, severityLabel } from "@/lib/types";
@@ -58,6 +59,7 @@ const NAV_ITEMS = [
 // ─────────────────────────────────────────────────────────────────────────────
 export default function MissionDashboard() {
   const modelStatus = useModelStatus();
+  const groqStatus  = useGroqStatus();
   const { mission, elapsed } = useMissionDetections();
   const { detections, addDetections, clearDetections, totalScans } = useDetections();
   const { alt, speed, bat, sig, lat, lon } = useTelemetry();
@@ -204,6 +206,31 @@ export default function MissionDashboard() {
                         <span className={styles.chip} style={{ color:"#FBBF24", borderColor:"rgba(245,158,11,0.3)", background:"#2A1D0A" }} title="Parent model classifies crop species; child disease specialist models standby">
                           CHILD MODELS: STANDBY
                         </span>
+                        {groqStatus.configured ? (
+                          <span
+                            className={styles.chip}
+                            style={{
+                              color: "#34D399",
+                              borderColor: "rgba(52, 211, 153, 0.4)",
+                              background: "rgba(16, 185, 129, 0.12)",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "5px",
+                            }}
+                            title={`Two-Stage LLMs Active: VLM (${groqStatus.vlm_model}) + Report Engine (${groqStatus.report_model})`}
+                          >
+                            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#10B981", boxShadow: "0 0 6px #10B981" }} />
+                            ⚡ AI LLM: {groqStatus.vlm_model?.split("/")[1] || "QWEN3.6"} + {groqStatus.report_model?.split("-")[0]?.toUpperCase() || "LLAMA"} READY
+                          </span>
+                        ) : (
+                          <span
+                            className={styles.chip}
+                            style={{ color: "#FBBF24", borderColor: "rgba(245,158,11,0.3)", background: "#2A1D0A" }}
+                            title="Configure Groq API key in CFG tab"
+                          >
+                            AI LLM: KEY REQUIRED
+                          </span>
+                        )}
                       </div>
                       <div className={styles.ctrlDivider}/>
                       <button
@@ -512,7 +539,7 @@ export default function MissionDashboard() {
                     </div>
                     <div className={styles.infoField}>
                       <span className={styles.infoLabel}>BACKEND ENDPOINT</span>
-                      <span className={styles.infoValue}>http://localhost:8000</span>
+                      <span className={styles.infoValue}>http://localhost:8001</span>
                     </div>
                   </div>
                   <div className={styles.configHeader} style={{ marginTop: "10px" }}>
@@ -523,7 +550,8 @@ export default function MissionDashboard() {
                      `[Device] GPU detected → ${modelStatus.device || "cpu"}\n` +
                      `[YOLO] YOLO ${modelStatus.model_name || "ParentModel.pt"} loaded successfully.\n` +
                      `[YOLO] Task: ${modelStatus.model_task || "classify"} | Device: ${modelStatus.device || "cpu"}\n` +
-                     `[Server] FastAPI routing active on port 8000.\n` +
+                     `[Groq] AI LLM & VLM Reasoning: ${groqStatus.configured ? "ACTIVE (" + (groqStatus.vlm_model || "qwen") + " + " + (groqStatus.report_model || "llama") + ")" : "KEY REQUIRED"}\n` +
+                     `[Server] FastAPI routing active on port 8001.\n` +
                      `[Status] Ready to accept image/video streams.\n` +
                      `[Diagnostics] GPU temperature: 49°C | VRAM: 0.0GB / 8.0GB`}
                   </div>

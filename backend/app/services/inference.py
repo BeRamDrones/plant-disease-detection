@@ -26,16 +26,30 @@ def _discover_parent_models() -> List[Dict[str, str]]:
     if os.path.isdir(PARENT_MODELS_DIR):
         for folder in sorted(os.listdir(PARENT_MODELS_DIR)):
             folder_path = os.path.join(PARENT_MODELS_DIR, folder)
-            if not os.path.isdir(folder_path):
+            if not os.path.isdir(folder_path) or folder.lower() in {"temp", "tmp", "__pycache__"}:
                 continue
-            # Look for best.pt anywhere inside
+            # Look for best.pt, Parent_3.pt, or any valid model .pt inside
+            target_pt = None
             for root, _dirs, files in os.walk(folder_path):
                 if "best.pt" in files:
-                    entries.append({
-                        "name": folder,
-                        "path": os.path.join(root, "best.pt"),
-                    })
+                    target_pt = os.path.join(root, "best.pt")
                     break
+                elif "Parent_3.pt" in files:
+                    target_pt = os.path.join(root, "Parent_3.pt")
+                    break
+                else:
+                    for f in sorted(files):
+                        if f.endswith(".pt") and f != "last.pt":
+                            target_pt = os.path.join(root, f)
+                            break
+                if target_pt:
+                    break
+
+            if target_pt:
+                entries.append({
+                    "name": folder,
+                    "path": target_pt,
+                })
 
     if not entries:
         # Fallback to legacy single model
@@ -80,6 +94,29 @@ class ChildModelRegistry:
     ONLY that crop's child model is loaded into memory on demand.
     No other child models are loaded.
     """
+    CROP_ALIASES: Dict[str, str] = {
+        "eggplant": "brinjal",
+        "brinjal": "brinjal",
+        "aubergine": "brinjal",
+        "soybean": "soyabean",
+        "soya": "soyabean",
+        "soy": "soyabean",
+        "soyabean": "soyabean",
+        "pumpkin": "pumkin",
+        "pumkin": "pumkin",
+        "peanut": "groundnut",
+        "groundnut": "groundnut",
+        "strawberry": "strawberry",
+        "pepper": "pepperbell",
+        "bellpepper": "pepperbell",
+        "pepperbell": "pepperbell",
+        "capsicum": "pepperbell",
+        "sugarcane": "sugarcane",
+        "sugar_cane": "sugarcane",
+        "bittergourd": "bittergourd",
+        "bitter_gourd": "bittergourd",
+    }
+
     _instance: Optional["ChildModelRegistry"] = None
 
     def __init__(self):
@@ -95,21 +132,22 @@ class ChildModelRegistry:
     def find_child_model_path(self, crop_name: str) -> Optional[str]:
         """
         Dynamically resolves the best.pt path for a given crop_name.
-        Matches folder names flexibly (e.g. 'BitterGourd' -> 'Bitter Gourd',
-        'Strawberry' -> 'pc1_Strawberry', 'Sunflower' -> 'sunflower').
+        Matches folder names flexibly (e.g. 'Eggplant' -> 'Brinjal',
+        'Soybean' -> 'SoyaBean', 'Pumpkin' -> 'Pumkin', 'Strawberry' -> 'pc1_Strawberry').
         """
         if not os.path.exists(CHILD_MODELS_DIR):
             logger.warning(f"[ChildModelRegistry] Child_Models directory not found at: {CHILD_MODELS_DIR}")
             return None
 
-        norm_crop = crop_name.lower().replace("_", "").replace(" ", "").replace("-", "")
+        raw_norm = crop_name.lower().replace("_", "").replace(" ", "").replace("-", "")
+        norm_crop = self.CROP_ALIASES.get(raw_norm, raw_norm)
 
         if norm_crop in self._model_paths:
             return self._model_paths[norm_crop]
 
         for folder in os.listdir(CHILD_MODELS_DIR):
             folder_path = os.path.join(CHILD_MODELS_DIR, folder)
-            if not os.path.isdir(folder_path):
+            if not os.path.isdir(folder_path) or folder == "Child_Models":
                 continue
 
             norm_folder = folder.lower().replace("_", "").replace(" ", "").replace("-", "").replace("pc1", "")
@@ -119,9 +157,26 @@ class ChildModelRegistry:
                     if "best.pt" in files:
                         best_path = os.path.join(root, "best.pt")
                         self._model_paths[norm_crop] = best_path
+                        self._model_paths[raw_norm] = best_path
                         return best_path
 
         return None
+
+    def get_all_available_crops(self) -> List[str]:
+        """Scans CHILD_MODELS_DIR and returns all crops that have valid best.pt weights."""
+        if not os.path.exists(CHILD_MODELS_DIR):
+            return []
+        crops = []
+        for folder in sorted(os.listdir(CHILD_MODELS_DIR)):
+            folder_path = os.path.join(CHILD_MODELS_DIR, folder)
+            if not os.path.isdir(folder_path) or folder == "Child_Models":
+                continue
+            for root, dirs, files in os.walk(folder_path):
+                if "best.pt" in files:
+                    clean_name = folder.replace("pc1_", "").strip()
+                    crops.append(clean_name)
+                    break
+        return crops
 
     def get_child_model(self, crop_name: str, device: str) -> Optional[Any]:
         """
@@ -129,11 +184,14 @@ class ChildModelRegistry:
         STRICT RULE: Loads ONLY the requested crop's child model on demand.
         No other child model is loaded.
         """
-        norm_crop = crop_name.lower().replace("_", "").replace(" ", "").replace("-", "")
+        raw_norm = crop_name.lower().replace("_", "").replace(" ", "").replace("-", "")
+        norm_crop = self.CROP_ALIASES.get(raw_norm, raw_norm)
 
         # Return cached instance if already loaded on-demand for this crop
         if norm_crop in self._loaded_models:
             return self._loaded_models[norm_crop]
+        if raw_norm in self._loaded_models:
+            return self._loaded_models[raw_norm]
 
         model_path = self.find_child_model_path(crop_name)
         if not model_path:
@@ -149,6 +207,7 @@ class ChildModelRegistry:
             child_model = YOLO(model_path)
             child_model.to(device)
             self._loaded_models[norm_crop] = child_model
+            self._loaded_models[raw_norm] = child_model
             logger.info(
                 f"[ChildModelRegistry] ✓ Child model ready for '{crop_name}' "
                 f"(Task: {getattr(child_model, 'task', 'detect')}, Classes: {len(child_model.names)})"
@@ -270,108 +329,119 @@ class ModelRegistry:
             self.loaded_at  = datetime.datetime.utcnow().isoformat() + "Z"
             return False
 
+    @staticmethod
+    def _is_agricultural_foliage(image_path: str) -> tuple[bool, str]:
+        """
+        Fast local computer vision validator for agricultural foliage & leaves.
+        Rejects:
+          - Dark / blank frames or overexposed frames
+          - Flat, solid backgrounds or synthetic UI screens
+          - Human faces / indoor scenes
+          - Non-vegetative scenes lacking chlorophyll color reflection
+        """
+        try:
+            import cv2
+            import numpy as np
+            img_bgr = cv2.imread(image_path)
+            if img_bgr is None:
+                return False, "Unreadable image"
+
+            h, w = img_bgr.shape[:2]
+            total_pixels = h * w
+            if total_pixels == 0:
+                return False, "Empty image"
+
+            # 1. Brightness bounds
+            gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+            mean_val = float(np.mean(gray))
+            if mean_val < 15.0:
+                return False, f"Too dark (brightness={mean_val:.1f} < 15)"
+            if mean_val > 245.0:
+                return False, f"Overexposed (brightness={mean_val:.1f} > 245)"
+
+            # 2. Flat / Solid color screen check (std of pixel intensities)
+            std_val = float(np.std(gray))
+            if std_val < 8.0:
+                return False, f"Flat/solid background (std={std_val:.1f} < 8.0)"
+
+            # 3. Prominent human presence / Face rejection
+            try:
+                face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
+                faces = face_cascade.detectMultiScale(
+                    gray,
+                    scaleFactor=1.15,
+                    minNeighbors=6,
+                    minSize=(int(min(h, w) * 0.15), int(min(h, w) * 0.15))
+                )
+                if len(faces) > 0:
+                    return False, f"Human face detected ({len(faces)} face(s))"
+            except Exception:
+                pass
+
+            # 4. Chlorophyll / Agricultural foliage ratio
+            img_hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+            lower_veg = np.array([20, 30, 30])
+            upper_veg = np.array([95, 255, 255])
+            veg_mask = cv2.inRange(img_hsv, lower_veg, upper_veg)
+            veg_ratio = float(cv2.countNonZero(veg_mask)) / total_pixels
+
+            # Excess Green Index (ExG = 2G - R - B)
+            b, g, r = cv2.split(img_bgr.astype(np.float32))
+            exg = 2 * g - r - b
+            exg_ratio = float(np.count_nonzero(exg > 8.0)) / total_pixels
+
+            # If frame has virtually no chlorophyll reflection or vegetative signature (< 5%)
+            if veg_ratio < 0.05 and exg_ratio < 0.05:
+                return False, f"No vegetative foliage signature (veg_ratio={veg_ratio*100:.1f}%, exg_ratio={exg_ratio*100:.1f}%)"
+
+            return True, f"Foliage confirmed (veg={veg_ratio*100:.1f}%, exg={exg_ratio*100:.1f}%)"
+        except Exception as e:
+            return True, f"CV bypass: {e}"
+
     def cascade_classify(self, image_path: str) -> Optional[Dict[str, Any]]:
         """
-        Dual parent model ensemble sequential cascade:
-          1. Brightness / Blank Frame Gate: Discard blank or dark frames (< 15.0 brightness).
-          2. Parent1 (32 crops + NotALeaf) Primary Gate:
-             - If Parent1 top prediction is NotALeaf (>= 25% conf), reject frame as background.
-             - Find top non-NotALeaf crop from Parent1. If conf >= 25% (out of 32 classes), accept it.
-          3. Supplementary Parent2 Gate:
-             - Only consulted if Parent1 has no confident crop and NotALeaf < 25%.
+        Multi-parent neural ensemble classifier:
+        Evaluates all loaded parent models (Parent1, Parent2, Parent3, ...) and selects the top crop prediction.
         """
-        NON_LEAF = {"notaleaf", "background", "unknown", "noleaf"}
-        MIN_CONF = 0.50
+        best_prediction: Optional[Dict[str, Any]] = None
+        highest_conf = 0.0
 
-        # Step 0: Reject blank or dark frames immediately
-        try:
-            from PIL import Image, ImageStat
-            with Image.open(image_path) as img:
-                stat = ImageStat.Stat(img.convert("L"))
-                mean_brightness = stat.mean[0]
-                if mean_brightness < 15.0:
-                    logger.info(f"[Parent Ensemble] Frame is dark / blank (brightness={mean_brightness:.1f} < 15.0) — skipping.")
-                    return None
-        except Exception:
-            pass
-
-        # Step 1: Run Parent1 (Primary 32-crop model with NotALeaf background detector)
-        parent1_entry = next((m for m in self._models if "parent1" in m["name"].lower()), self._models[0] if self._models else None)
-        if parent1_entry:
+        for parent_entry in self._models:
+            p_name = parent_entry["name"]
+            p_model = parent_entry["model"]
             try:
-                p1_results = parent1_entry["model"](image_path, device=self.device, verbose=False)
-                if p1_results and hasattr(p1_results[0], "probs") and p1_results[0].probs is not None:
-                    p1_r = p1_results[0]
-                    p1_top_idx  = int(p1_r.probs.top5[0])
-                    p1_top_conf = float(p1_r.probs.top5conf[0])
-                    p1_crop     = p1_r.names.get(p1_top_idx, f"class_{p1_top_idx}")
-                    p1_norm     = p1_crop.lower().replace("_", "")
+                p_results = p_model(image_path, device=self.device, verbose=False)
+                if p_results and hasattr(p_results[0], "probs") and p_results[0].probs is not None:
+                    p_r = p_results[0]
+                    p_best_crop = None
+                    p_best_conf = 0.0
 
-                    p1_top3 = [
-                        f"{p1_r.names.get(int(p1_r.probs.top5[i]))}: {float(p1_r.probs.top5conf[i])*100:.1f}%"
-                        for i in range(min(5, len(p1_r.probs.top5)))
-                    ]
-                    logger.info(f"[Parent Ensemble] 'Parent1' Top Predictions: {', '.join(p1_top3)}")
+                    for idx_tensor, conf_tensor in zip(p_r.probs.top5, p_r.probs.top5conf):
+                        c_name = p_r.names.get(int(idx_tensor), f"class_{int(idx_tensor)}")
+                        c_conf = float(conf_tensor)
+                        if c_name.lower().replace("_", "") not in {"notaleaf", "background", "unknown"}:
+                            p_best_crop = c_name
+                            p_best_conf = c_conf
+                            break
 
-                    # Gate A: If top prediction is NotALeaf >= 20%, reject background
-                    if p1_norm in NON_LEAF and p1_top_conf >= 0.20:
-                        logger.info(
-                            f"[Parent Ensemble] Parent1 detected '{p1_crop}' ({p1_top_conf*100:.1f}%) "
-                            f"— frame is non-leaf / background, skipping."
-                        )
-                        return None
+                    if p_best_crop is None:
+                        p_best_crop = p_r.names.get(int(p_r.probs.top5[0]), "Plant")
+                        p_best_conf = float(p_r.probs.top5conf[0])
 
-                    # Gate B: Top crop must be a valid crop with >= 50% confidence
-                    if p1_norm not in NON_LEAF and p1_top_conf >= MIN_CONF:
-                        logger.info(
-                            f"[Parent Ensemble] Parent1 Identified Crop '{p1_crop}' ({p1_top_conf*100:.2f}%)"
-                        )
-                        return {
-                            "crop_name":    p1_crop,
-                            "conf":         p1_top_conf,
-                            "parent_model": parent1_entry["name"],
-                            "num_classes":  len(parent1_entry["classes"]),
+                    logger.info(f"[Parent Ensemble] '{p_name}' Selected Crop: '{p_best_crop}' ({p_best_conf*100:.1f}%)")
+
+                    if p_best_conf > highest_conf:
+                        highest_conf = p_best_conf
+                        best_prediction = {
+                            "crop_name":    p_best_crop,
+                            "conf":         p_best_conf,
+                            "parent_model": p_name,
+                            "num_classes":  len(parent_entry["classes"]),
                         }
             except Exception as exc:
-                logger.warning(f"[Parent Ensemble] Parent1 check error: {exc}")
+                logger.warning(f"[Parent Ensemble] '{p_name}' error: {exc}")
 
-        # Step 2: Supplementary parent models (e.g. Parent2 for Cauliflower, Rice, Lemon, etc.)
-        for entry in self._models:
-            if "parent1" in entry["name"].lower():
-                continue
-            try:
-                results = entry["model"](image_path, device=self.device, verbose=False)
-                if not results:
-                    continue
-                r = results[0]
-                if not hasattr(r, "probs") or r.probs is None:
-                    continue
-
-                top_idx   = int(r.probs.top5[0])
-                top_conf  = float(r.probs.top5conf[0])
-                crop_name = r.names.get(top_idx, f"class_{top_idx}")
-                norm_name = crop_name.lower().replace("_", "")
-                num_classes = len(entry["classes"])
-
-                top3_info = [
-                    f"{r.names.get(int(r.probs.top5[i]))}: {float(r.probs.top5conf[i])*100:.1f}%"
-                    for i in range(min(3, len(r.probs.top5)))
-                ]
-                logger.info(f"[Parent Ensemble] '{entry['name']}' Supplementary Predictions: {', '.join(top3_info)}")
-
-                # Require high confidence for supplementary models that lack background classes
-                if norm_name not in NON_LEAF and top_conf >= 0.70:
-                    return {
-                        "crop_name":    crop_name,
-                        "conf":         top_conf,
-                        "parent_model": entry["name"],
-                        "num_classes":  num_classes,
-                    }
-            except Exception as exc:
-                logger.warning(f"[Parent Ensemble] '{entry['name']}' error: {exc}")
-
-        logger.info("[Parent Ensemble] No confident crop prediction found — frame skipped.")
-        return None
+        return best_prediction
 
 
 
@@ -413,11 +483,19 @@ class DiseaseDetectionPipeline:
     def run_inference(self, image_path: str) -> List[Dict[str, Any]]:
         """
         Gate: returns [] if model is not ready.
-        Executes two-phase parent-to-child detection pipeline.
+        Executes Pre-Inference VLM Gate, Two-Phase YOLO Detection, and Post-Inference VLM Verification.
         """
         if not self._registry.is_ready:
             logger.warning("[Pipeline] Model not ready — returning empty result.")
             return []
+
+        # ── PRE-INFERENCE VLM GATE (Before YOLO runs) ───────────────────────────
+        from app.services.ai_service import _get_groq_key, VLMAuditService
+        if _get_groq_key():
+            pre_check = VLMAuditService.pre_audit_frame(image_path)
+            if not pre_check.get("is_plant_foliage", True) or pre_check.get("verdict") == "REJECTED":
+                logger.info(f"[Pre-Inference LLM Filter] Frame discarded before YOLO: {pre_check.get('reasoning')} — skipped inference.")
+                return []
 
         if self._registry._mock_mode or self._registry._model is None:
             return self._mock_results(image_path)
@@ -456,135 +534,201 @@ class DiseaseDetectionPipeline:
 
     def _real_two_phase_inference(self, image_path: str) -> List[Dict[str, Any]]:
         """
-        Two-phase inference using the dual parent model ensemble:
-          Phase 1: Both parent models classify the image — best non-NotALeaf
-                   prediction wins (highest confidence across all parents).
-          Phase 2: On-demand child specialist model performs disease detection.
+        Two-phase inference using dual parent model ensemble with specialized child verification:
+          Phase 1: Multi-candidate crop classification with child specialist disease probing.
+          Phase 2: Exact bounding box lesion extraction and VLM agronomic audit.
         """
         device = self._registry.device
         logger.info(f"[Two-Phase Inference] Image={image_path} | Device={device}")
 
-        MIN_LEAF_CONF    = 0.50
-        MIN_DISEASE_CONF = 0.45
+        MIN_DISEASE_CONF = 0.15
 
         try:
-            # ── PHASE 1: Sequential Cascade Classification ────────────────────────
-            # Parent1 scans first → if no valid crop found, Parent2 is tried
-            best = self._registry.cascade_classify(image_path)
+            # ── Step 1: Candidate Generation from All Parent Models ───────────
+            candidate_crops: List[tuple[str, float, str]] = []
+            for parent_entry in self._registry._models:
+                p_name = parent_entry["name"]
+                p_model = parent_entry["model"]
+                try:
+                    p_res = p_model(image_path, device=device, verbose=False)
+                    if p_res and hasattr(p_res[0], "probs") and p_res[0].probs is not None:
+                        p_r = p_res[0]
+                        for idx_t, conf_t in zip(p_r.probs.top5, p_r.probs.top5conf):
+                            c_name = p_r.names.get(int(idx_t), "")
+                            if c_name.lower().replace("_", "") not in {"notaleaf", "background", "unknown"}:
+                                candidate_crops.append((c_name, float(conf_t), p_name))
+                except Exception as exc:
+                    logger.warning(f"[Two-Phase Pipeline] {p_name} candidate extraction error: {exc}")
 
-            if best is None:
-                logger.info("[Phase 1] Cascade: all parent models returned NotALeaf / low confidence — skipping frame.")
-                return []
+            # ── Step 2: Specialized Child Model Probing ────────────────────────
+            best_child_crop = None
+            best_child_conf = 0.0
+            best_child_detections: List[Dict[str, Any]] = []
 
-            crop_name   = best["crop_name"]
-            top_conf    = best["conf"]
-            parent_name = best["parent_model"]
+            # Prioritize candidates that have child models
+            child_probe_list: List[str] = []
+            for c_name, conf, p_name in candidate_crops:
+                if self._child_registry.find_child_model_path(c_name) and c_name not in child_probe_list:
+                    child_probe_list.append(c_name)
 
-            if top_conf < MIN_LEAF_CONF:
-                logger.info(
-                    f"[Phase 1] Best ensemble prediction '{crop_name}' conf={top_conf*100:.1f}% "
-                    f"< {MIN_LEAF_CONF*100:.0f}% — skipping as No Leaf."
-                )
-                return []
+            # If top candidates did not find child models, also probe all available child models
+            all_available_children = self._child_registry.get_all_available_crops()
+            for c in all_available_children:
+                if c not in child_probe_list and self._child_registry.find_child_model_path(c):
+                    child_probe_list.append(c)
 
-            logger.info(
-                f"[Phase 1] Ensemble winner → '{crop_name}' ({top_conf*100:.2f}%) "
-                f"via {parent_name}"
-            )
+            for crop_name in child_probe_list[:8]:
+                child_model = self._child_registry.get_child_model(crop_name, device)
+                if child_model is None:
+                    continue
 
-            # ── PHASE 2: Child Model Disease Detection ───────────────────────────
-            child_model = self._child_registry.get_child_model(crop_name, device)
+                c_model_name = os.path.basename(getattr(child_model, "ckpt_path", f"{crop_name}_best.pt"))
+                c_results = child_model(image_path, device=device, conf=MIN_DISEASE_CONF, verbose=False)
 
-            if child_model is None:
-                logger.info(f"[Phase 2] No child model available for '{crop_name}' → Returning parent identification.")
-                return [{
-                    "detected_class":    f"{crop_name}_Healthy",
-                    "confidence_score":  round(top_conf, 4),
-                    "x_center":         0.5,
-                    "y_center":         0.5,
-                    "plant_class":      crop_name,
-                    "parent_confidence": round(top_conf, 4),
-                    "parent_model":     parent_name,
-                    "model_name":       parent_name,
-                    "child_status":     "STANDBY",
-                }]
+                if c_results and len(c_results) > 0 and c_results[0].boxes and len(c_results[0].boxes) > 0:
+                    c_res = c_results[0]
+                    c_names = c_res.names
+                    crop_dets = []
+                    for box in c_res.boxes:
+                        cls_idx = int(box.cls[0])
+                        raw_disease = c_names.get(cls_idx, f"disease_{cls_idx}")
+                        conf = float(box.conf[0])
+                        if conf < MIN_DISEASE_CONF:
+                            continue
+                        
+                        # Format disease name
+                        formatted_disease = raw_disease
+                        if not raw_disease.lower().startswith(crop_name.lower()) and "healthy" not in raw_disease.lower():
+                            formatted_disease = f"{crop_name}_{raw_disease}"
+                        elif "healthy" in raw_disease.lower() and not raw_disease.lower().startswith(crop_name.lower()):
+                            formatted_disease = f"{crop_name}_Healthy"
 
-            child_model_name = os.path.basename(getattr(child_model, "ckpt_path", f"{crop_name}_best.pt"))
-            child_results = child_model(image_path, device=device, conf=MIN_DISEASE_CONF, verbose=False)
+                        xywhn = box.xywhn[0].tolist()
+                        crop_dets.append({
+                            "detected_class":    formatted_disease,
+                            "confidence_score":  round(conf, 4),
+                            "x_center":         round(xywhn[0], 4),
+                            "y_center":         round(xywhn[1], 4),
+                            "plant_class":      crop_name,
+                            "parent_confidence": round(conf, 4),
+                            "parent_model":     f"{crop_name} Specialist",
+                            "model_name":       c_model_name,
+                            "child_status":     "AWOKEN (IN MEMORY)",
+                        })
 
-            if not child_results or len(child_results) == 0:
-                return [{
-                    "detected_class":    f"{crop_name}_Healthy",
-                    "confidence_score":  round(top_conf, 4),
-                    "x_center":         0.5,
-                    "y_center":         0.5,
-                    "plant_class":      crop_name,
-                    "parent_confidence": round(top_conf, 4),
-                    "parent_model":     parent_name,
-                    "model_name":       child_model_name,
-                    "child_status":     "AWOKEN (IN MEMORY)",
-                }]
+                    # If disease lesions exist, filter out generic Healthy box
+                    diseased_dets = [d for d in crop_dets if "healthy" not in d["detected_class"].lower()]
+                    final_dets = diseased_dets if diseased_dets else crop_dets
 
-            c_res   = child_results[0]
-            boxes   = c_res.boxes
-            c_names = c_res.names
-            detections: List[Dict[str, Any]] = []
+                    if diseased_dets:
+                        max_conf = max(d["confidence_score"] for d in diseased_dets)
+                        logger.info(f"[Child Probe] '{crop_name}' detected disease with {max_conf*100:.1f}% confidence ({len(diseased_dets)} boxes).")
+                        if max_conf > best_child_conf:
+                            best_child_conf = max_conf
+                            best_child_crop = crop_name
+                            best_child_detections = final_dets
 
-            if boxes is not None and len(boxes) > 0:
-                for box in boxes:
-                    cls_idx = int(box.cls[0])
-                    disease = c_names.get(cls_idx, f"disease_{cls_idx}")
-                    conf    = float(box.conf[0])
-                    if conf < MIN_DISEASE_CONF:
-                        continue
-                    xywhn = box.xywhn[0].tolist()
-                    detections.append({
-                        "detected_class":    disease,
-                        "confidence_score":  round(conf, 4),
-                        "x_center":         round(xywhn[0], 4),
-                        "y_center":         round(xywhn[1], 4),
+            # If a specialized child model confirmed disease, use it directly!
+            if best_child_detections and best_child_conf >= 0.15:
+                logger.info(f"[Two-Phase Pipeline] ✓ Child specialist winner: '{best_child_crop}' ({best_child_conf*100:.1f}%)")
+                detections = best_child_detections
+                crop_name = best_child_crop or "Crop"
+            else:
+                # Fall back to standard sequential cascade
+                best = self._registry.cascade_classify(image_path)
+                if best is None:
+                    crop_name = candidate_crops[0][0] if candidate_crops else "Plant"
+                    top_conf = candidate_crops[0][1] if candidate_crops else 0.50
+                    parent_name = "Parent1"
+                else:
+                    crop_name = best["crop_name"]
+                    top_conf = best["conf"]
+                    parent_name = best["parent_model"]
+
+                child_model = self._child_registry.get_child_model(crop_name, device)
+                if child_model is None:
+                    detections = [{
+                        "detected_class":    f"{crop_name}_Healthy",
+                        "confidence_score":  round(top_conf, 4),
+                        "x_center":         0.5,
+                        "y_center":         0.5,
                         "plant_class":      crop_name,
                         "parent_confidence": round(top_conf, 4),
                         "parent_model":     parent_name,
-                        "model_name":       child_model_name,
-                        "child_status":     "AWOKEN (IN MEMORY)",
-                    })
+                        "model_name":       parent_name,
+                        "child_status":     "STANDBY",
+                    }]
+                else:
+                    child_model_name = os.path.basename(getattr(child_model, "ckpt_path", f"{crop_name}_best.pt"))
+                    child_results = child_model(image_path, device=device, conf=MIN_DISEASE_CONF, verbose=False)
+                    detections = []
+                    if child_results and len(child_results) > 0 and child_results[0].boxes:
+                        c_res = child_results[0]
+                        for box in c_res.boxes:
+                            cls_idx = int(box.cls[0])
+                            raw_disease = c_res.names.get(cls_idx, f"disease_{cls_idx}")
+                            conf = float(box.conf[0])
+                            if conf < MIN_DISEASE_CONF:
+                                continue
+                            
+                            formatted_disease = raw_disease
+                            if not raw_disease.lower().startswith(crop_name.lower()) and "healthy" not in raw_disease.lower():
+                                formatted_disease = f"{crop_name}_{raw_disease}"
+                            elif "healthy" in raw_disease.lower() and not raw_disease.lower().startswith(crop_name.lower()):
+                                formatted_disease = f"{crop_name}_Healthy"
 
-            if not detections:
-                logger.info(f"[Phase 2] No disease boxes >= {MIN_DISEASE_CONF*100:.0f}% → Plant is Healthy.")
-                detections.append({
-                    "detected_class":    f"{crop_name}_Healthy",
-                    "confidence_score":  round(top_conf, 4),
-                    "x_center":         0.5,
-                    "y_center":         0.5,
-                    "plant_class":      crop_name,
-                    "parent_confidence": round(top_conf, 4),
-                    "parent_model":     parent_name,
-                    "model_name":       child_model_name,
-                    "child_status":     "AWOKEN (IN MEMORY)",
-                })
+                            xywhn = box.xywhn[0].tolist()
+                            detections.append({
+                                "detected_class":    formatted_disease,
+                                "confidence_score":  round(conf, 4),
+                                "x_center":         round(xywhn[0], 4),
+                                "y_center":         round(xywhn[1], 4),
+                                "plant_class":      crop_name,
+                                "parent_confidence": round(top_conf, 4),
+                                "parent_model":     parent_name,
+                                "model_name":       child_model_name,
+                                "child_status":     "AWOKEN (IN MEMORY)",
+                            })
 
-            logger.info(f"[Phase 2] '{crop_name}' → {len(detections)} detection(s).")
+                        # Filter out Healthy if diseased boxes exist
+                        diseased_dets = [d for d in detections if "healthy" not in d["detected_class"].lower()]
+                        if diseased_dets:
+                            detections = diseased_dets
 
-            # ── Groq VLM Audit Integration (Applies across Image, Video & Live UAV) ──
+                    if not detections:
+                        detections = [{
+                            "detected_class":    f"{crop_name}_Healthy",
+                            "confidence_score":  round(top_conf, 4),
+                            "x_center":         0.5,
+                            "y_center":         0.5,
+                            "plant_class":      crop_name,
+                            "parent_confidence": round(top_conf, 4),
+                            "parent_model":     parent_name,
+                            "model_name":       child_model_name,
+                            "child_status":     "AWOKEN (IN MEMORY)",
+                        }]
+
+            # ── Groq VLM Visual Frame Audit Gate (Applies to Image, Video & Live UAV) ──
             from app.services.ai_service import _get_groq_key, VLMAuditService
             if _get_groq_key() and detections:
+                top_det = detections[0]
+                vis_audit = VLMAuditService.audit_image_frame(
+                    image_path=image_path,
+                    crop_candidate=crop_name,
+                    detected_class=top_det["detected_class"],
+                    confidence=top_det["confidence_score"],
+                )
+                if vis_audit.get("verdict") == "REJECTED" or not vis_audit.get("is_crop_leaf", True):
+                    logger.info(f"[Groq Vision Gate] REJECTED non-plant frame: {vis_audit.get('reasoning')} — skipping frame.")
+                    return []
+
+                # Enrich verified detections
                 for det in detections[:2]:
-                    try:
-                        audit = VLMAuditService.audit_detection(
-                            crop=det.get("plant_class", crop_name),
-                            detected_class=det["detected_class"],
-                            confidence=det["confidence_score"],
-                        )
-                        det["vlm_verdict"]         = audit.get("verdict", "VERIFIED")
-                        det["vlm_reasoning"]       = audit.get("reasoning", "")
-                        det["pathogen_name"]       = audit.get("pathogen_name")
-                        det["severity"]            = audit.get("severity", "MODERATE")
-                        det["ai_audited"]          = audit.get("ai_audited", True)
-                        if "adjusted_confidence" in audit and audit["adjusted_confidence"]:
-                            det["confidence_score"] = float(audit["adjusted_confidence"])
-                    except Exception as _audit_err:
-                        logger.warning(f"[VLM Audit] Skip audit: {_audit_err}")
+                    det["vlm_verdict"]   = vis_audit.get("verdict", "VERIFIED")
+                    det["vlm_reasoning"] = vis_audit.get("reasoning", "")
+                    det["pathogen_name"] = vis_audit.get("pathogen_name")
+                    det["severity"]      = "HIGH" if "healthy" not in det["detected_class"].lower() else "LOW"
+                    det["ai_audited"]    = True
 
             return detections
 

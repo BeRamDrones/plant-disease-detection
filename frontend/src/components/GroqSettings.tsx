@@ -105,7 +105,7 @@ export default function GroqSettings() {
 
       <p style={{ fontSize: "11px", color: "#94A3B8", marginBottom: "14px", lineHeight: "1.5" }}>
         Integrating your Groq API Key powers a two-stage hybrid AI pipeline: 
-        <strong style={{ color: "#38BDF8" }}> Stage 1 VLM Audit</strong> (Qwen3-32B) validates YOLO detections in real-time, and 
+        <strong style={{ color: "#38BDF8" }}> Stage 1 VLM Audit</strong> (Qwen3.6-27B) validates YOLO detections in real-time, and 
         <strong style={{ color: "#34D399" }}> Stage 2 Report Engine</strong> (Llama-3.1-8B) generates structured agronomic field reports upon mission completion.
       </p>
 
@@ -116,7 +116,7 @@ export default function GroqSettings() {
             STAGE 1: REAL-TIME VLM AUDITOR
           </div>
           <div style={{ fontSize: "12px", fontFamily: "monospace", fontWeight: 700, color: "#38BDF8" }}>
-            {status?.vlm_model || "qwen/qwen3-32b"}
+            {status?.vlm_model || "qwen/qwen3.6-27b"}
           </div>
         </div>
         <div style={{ background: "#151C2A", border: "1px solid #1E293B", borderRadius: "6px", padding: "10px" }}>

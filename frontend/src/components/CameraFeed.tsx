@@ -9,7 +9,7 @@ import { InputMode } from "./InputModeSelector";
 import { RawDetection } from "@/hooks/useDetections";
 import styles from "./CameraFeed.module.css";
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
 interface Props {
   lat: number;
@@ -387,42 +387,9 @@ function LiveUAVMode({
       setCamStatus("active");
       return () => stream?.getTracks().forEach(t => t.stop());
     } else {
-      // Mock stream fallback
-      const canvas = document.createElement("canvas");
-      canvas.width = 1280; canvas.height = 720;
-      const ctx = canvas.getContext("2d");
-      let frameId = 0;
-      
-      const draw = () => {
-        if (ctx) {
-          const t = Date.now() / 1000;
-          ctx.fillStyle = `hsl(${(t * 20) % 360}, 15%, 15%)`;
-          ctx.fillRect(0, 0, canvas.width, canvas.height);
-          
-          ctx.fillStyle = "rgba(255,255,255,0.15)";
-          ctx.font = "bold 30px monospace";
-          ctx.fillText("MOCK UAV SENSOR STREAM ACTIVE", 350, 340);
-          ctx.font = "20px monospace";
-          ctx.fillText(`Hardware Error: ${lastError?.message || "Unavailable"}`, 350, 380);
-          
-          // Scanning line animation
-          ctx.fillStyle = "rgba(56, 189, 248, 0.4)";
-          ctx.fillRect(0, (t * 200) % canvas.height, canvas.width, 4);
-        }
-        frameId = requestAnimationFrame(draw);
-      };
-      draw();
-      
-      const mockStream = canvas.captureStream(30);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mockStream;
-        videoRef.current.play().catch(console.error);
-      }
-      setCamStatus("active");
-      return () => {
-        cancelAnimationFrame(frameId);
-        mockStream.getTracks().forEach(t => t.stop());
-      };
+      setCamStatus("unavailable");
+      setCamErrorMsg(lastError?.message || "Camera hardware unavailable or permission denied");
+      return;
     }
   }, [camOn]);
 
@@ -455,9 +422,12 @@ function LiveUAVMode({
     if (!camOn || camStatus !== "active" || !canvas || !modelReady || !video) return;
     if (isInferringRef.current) return;
 
-    canvas.width  = video.videoWidth  || 640;
-    canvas.height = video.videoHeight || 360;
-    canvas.getContext("2d")?.drawImage(video, 0, 0);
+    const w = video.videoWidth || 640;
+    const h = video.videoHeight || 360;
+    const scale = Math.min(1.0, 512 / Math.max(w, h, 1));
+    canvas.width  = Math.max(64, Math.round(w * scale));
+    canvas.height = Math.max(64, Math.round(h * scale));
+    canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
 
     canvas.toBlob(async blob => {
       if (!blob) return;
@@ -476,7 +446,7 @@ function LiveUAVMode({
       } finally {
         isInferringRef.current = false;
       }
-    }, "image/jpeg", 0.85);
+    }, "image/jpeg", 0.80);
   }, [camOn, camStatus, modelReady, onDetections]);
 
   useEffect(() => {

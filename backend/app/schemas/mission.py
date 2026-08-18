@@ -2,8 +2,12 @@ from pydantic import BaseModel, Field, model_validator
 from datetime import datetime
 from typing import List, Tuple, Optional
 from app.models.mission import MissionPhase, MissionStatus
-from geoalchemy2.shape import to_shape
-from shapely.geometry import mapping
+try:
+    from geoalchemy2.shape import to_shape
+    from shapely.geometry import mapping
+except ImportError:
+    to_shape = None
+    mapping = None
 
 class GeoJSONPolygon(BaseModel):
     type: str = Field("Polygon", pattern="^Polygon$")

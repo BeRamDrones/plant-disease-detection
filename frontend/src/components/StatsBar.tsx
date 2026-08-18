@@ -1,10 +1,10 @@
-"use client";
 import React from "react";
-import { Shield, AlertTriangle, Activity, Layers, Cpu, Camera, Film, Radio } from "lucide-react";
+import { Shield, AlertTriangle, Activity, Layers, Cpu, Camera, Film, Radio, Sparkles } from "lucide-react";
 import { Detection, ZoneSummary } from "@/lib/types";
 import { InputMode } from "./InputModeSelector";
 import styles from "./StatsBar.module.css";
 import { ModelStatus } from "@/hooks/useModelStatus";
+import { useGroqStatus } from "@/hooks/useGroqStatus";
 
 interface Props {
   detections: Detection[];
@@ -27,6 +27,7 @@ const MODE_LABELS: Record<InputMode, string> = {
 };
 
 export default function StatsBar({ detections, zones, healthScore, inputMode, modelStatus }: Props) {
+  const groqStatus = useGroqStatus();
   const diseased   = detections.filter(d => d.detected_class !== "healthy");
   const classMap   = Object.fromEntries(
     Object.entries(
@@ -101,6 +102,23 @@ export default function StatsBar({ detections, zones, healthScore, inputMode, mo
             {modelStatus.ready
               ? (modelStatus.mock_mode ? "MOCK MODE" : `READY (${modelStatus.model_task?.toUpperCase()})`)
               : "LOADING…"}
+          </span>
+        </div>
+      </div>
+
+      <div className={styles.divider}/>
+
+      {/* AI LLM Reasoning indicator */}
+      <div className={styles.statBlock} style={{ flex: "none" }} title={groqStatus.configured ? `VLM: ${groqStatus.vlm_model} | Report: ${groqStatus.report_model}` : "API Key Not Set"}>
+        <Sparkles size={16} color={groqStatus.configured ? "#10B981" : "#FBBF24"}/>
+        <div className={styles.statContent}>
+          <span className={styles.statLabel}>
+            AI LLM REASONING
+          </span>
+          <span className={styles.statValue} style={{ color: groqStatus.configured ? "#34D399" : "#FBBF24", fontSize: "11px" }}>
+            {groqStatus.configured
+              ? `READY (${groqStatus.vlm_model?.split("/")[1] || "QWEN3.6"})`
+              : "KEY REQUIRED"}
           </span>
         </div>
       </div>

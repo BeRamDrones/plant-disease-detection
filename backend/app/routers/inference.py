@@ -32,7 +32,7 @@ async def model_registry():
     if os.path.isdir(CHILD_MODELS_DIR):
         for folder in sorted(os.listdir(CHILD_MODELS_DIR)):
             folder_path = os.path.join(CHILD_MODELS_DIR, folder)
-            if not os.path.isdir(folder_path):
+            if not os.path.isdir(folder_path) or folder == "Child_Models":
                 continue
 
             # Resolve display name (strip pc1_ prefix, replace underscores)

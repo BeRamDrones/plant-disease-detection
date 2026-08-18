@@ -9,6 +9,7 @@ Stage 2 │ Post-Mission Report Engine  │ Groq: llama-3.1-8b-instant
 """
 
 import os
+import re
 import json
 import logging
 import urllib.request
@@ -25,8 +26,58 @@ ENV_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "
 # Env helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _read_env_dict(path: str) -> Dict[str, str]:
+    res: Dict[str, str] = {}
+    if not os.path.exists(path):
+        return res
+    try:
+        from dotenv import dotenv_values
+        vals = dotenv_values(path)
+        for k, v in vals.items():
+            if v is not None and str(v).strip():
+                res[k] = str(v).strip()
+    except Exception:
+        pass
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                if "=" in line:
+                    k, v = line.split("=", 1)
+                    k = k.strip()
+                    v = v.strip().strip("'\"")
+                    if k and v and k not in res:
+                        res[k] = v
+    except Exception:
+        pass
+    return res
+
 def _get_groq_key() -> str:
-    return os.getenv("GROQ_API_KEY", "").strip()
+    """Reads Groq API key dynamically from backend/.env, project .env, or system environment variables."""
+    key_names = ["GROQ_API_KEY", "GROQ_KEY", "QWEN_API_KEY", "GROQ_VLM_KEY", "GROQ_VISION_KEY", "QWEN_KEY", "GROQ_APIKEY", "GROQ_QWEN_KEY"]
+
+    # 1. Check system / process environment variables
+    for k in key_names:
+        val = os.getenv(k, "").strip()
+        if val:
+            return val
+
+    # 2. Check backend/.env and root .env files
+    search_paths = [
+        ENV_PATH,
+        os.path.join(os.path.dirname(ENV_PATH), "..", ".env"),
+        os.path.join(os.path.dirname(ENV_PATH), "..", ".env.local"),
+        os.path.join(os.path.dirname(ENV_PATH), ".env.local"),
+    ]
+    for env_path in search_paths:
+        vals = _read_env_dict(env_path)
+        for k in key_names:
+            if vals.get(k):
+                return vals[k]
+    return ""
 
 def set_groq_key(key: str) -> bool:
     clean_key = key.strip()
@@ -36,9 +87,15 @@ def set_groq_key(key: str) -> bool:
     return True
 
 def _get_vlm_model() -> str:
-    return os.getenv("GROQ_VLM_MODEL", "qwen/qwen3-32b").strip()
+    vals = _read_env_dict(ENV_PATH)
+    if vals.get("GROQ_VLM_MODEL"):
+        return vals["GROQ_VLM_MODEL"]
+    return os.getenv("GROQ_VLM_MODEL", "qwen/qwen3.6-27b").strip()
 
 def _get_report_model() -> str:
+    vals = _read_env_dict(ENV_PATH)
+    if vals.get("GROQ_REPORT_MODEL"):
+        return vals["GROQ_REPORT_MODEL"]
     return os.getenv("GROQ_REPORT_MODEL", "llama-3.1-8b-instant").strip()
 
 def _persist_env(updates: Dict[str, str]) -> None:
@@ -106,6 +163,7 @@ def _groq_chat(
             headers={
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {key}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             },
             method="POST",
         )
@@ -122,29 +180,137 @@ def _groq_chat(
     return None
 
 
-def _parse_json_response(text: str) -> Optional[Dict[str, Any]]:
-    """Strips markdown fences and parses JSON."""
-    clean = text.strip()
-    for prefix in ("```json", "```"):
-        if clean.startswith(prefix):
-            clean = clean[len(prefix):]
-    if clean.endswith("```"):
-        clean = clean[:-3]
+import base64
+import time
+import io
+from PIL import Image
+
+def _optimize_image_for_vlm(image_bytes: bytes, max_dim: int = 480) -> bytes:
+    """Downscales image to max_dim and compresses as JPEG to reduce vision tokens and avoid rate limits."""
     try:
-        return json.loads(clean.strip())
+        with Image.open(io.BytesIO(image_bytes)) as img:
+            img = img.convert("RGB")
+            img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=75, optimize=True)
+            return buf.getvalue()
     except Exception:
+        return image_bytes
+
+def _groq_vision_chat(
+    model: str,
+    system: str,
+    user_prompt: str,
+    image_bytes: bytes,
+    max_tokens: int = 256,
+    timeout: int = 15,
+) -> Optional[str]:
+    """Groq vision chat completion call with optimized base64 image."""
+    key = _get_groq_key()
+    if not key:
         return None
+
+    opt_bytes = _optimize_image_for_vlm(image_bytes, max_dim=480)
+    b64_str = base64.b64encode(opt_bytes).decode("utf-8")
+    vision_model = model if (model and model.strip()) else _get_vlm_model()
+
+    payload = {
+        "model": vision_model,
+        "messages": [
+            {"role": "system", "content": system},
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{b64_str}"
+                        }
+                    }
+                ]
+            }
+        ],
+        "temperature": 0.1,
+        "max_tokens": max_tokens,
+    }
+
+    try:
+        req = urllib.request.Request(
+            GROQ_BASE_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {key}",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            result = json.loads(resp.read().decode("utf-8"))
+            choices = result.get("choices", [])
+            if choices:
+                return choices[0].get("message", {}).get("content", "").strip()
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="ignore")
+        logger.warning(f"[AIService] Groq Vision HTTP {e.code}: {err_body[:200]}")
+    except Exception as e:
+        logger.warning(f"[AIService] Groq Vision call error: {e}")
+    return None
+
+
+def _parse_json_response(text: str) -> Optional[Dict[str, Any]]:
+    """Strips thinking tags, markdown fences, and extracts/parses JSON robustly."""
+    if not text:
+        return None
+
+    # 1. Remove <think>...</think> blocks if present
+    clean = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+
+    # 2. Try direct load after stripping markdown fences
+    candidate = clean
+    for prefix in ("```json", "```JSON", "```"):
+        if candidate.startswith(prefix):
+            candidate = candidate[len(prefix):]
+    if candidate.endswith("```"):
+        candidate = candidate[:-3]
+    candidate = candidate.strip()
+
+    try:
+        return json.loads(candidate)
+    except Exception:
+        pass
+
+    # 3. Search for json markdown block ```json ... ```
+    m = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", clean, flags=re.DOTALL | re.IGNORECASE)
+    if m:
+        try:
+            return json.loads(m.group(1).strip())
+        except Exception:
+            pass
+
+    # 4. Search for outer-most { ... }
+    first_brace = clean.find("{")
+    last_brace = clean.rfind("}")
+    if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+        json_str = clean[first_brace:last_brace + 1]
+        try:
+            return json.loads(json_str)
+        except Exception:
+            pass
+
+    return None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Stage 1 — Real-Time VLM Audit  (qwen/qwen3-32b)
+# Stage 1 — Real-Time VLM Audit  (llama-3.2-11b-vision-preview / qwen)
 # ─────────────────────────────────────────────────────────────────────────────
 
 class VLMAuditService:
     """
     MODEL 1: Real-Time VLM Audit
-    Runs 1–2 times per key detection event during the mission.
-    Validates YOLO classification with agronomic reasoning.
+    Audits YOLO model detections using Groq Vision to reject non-plant scenes
+    (faces, rooms, walls) and verify genuine plant pathology.
     """
 
     SYSTEM_PROMPT = (
@@ -152,6 +318,147 @@ class VLMAuditService:
         "Your role is to verify YOLO model detections with scientific agronomic reasoning. "
         "Be concise, decisive, and output only valid JSON."
     )
+
+    _last_pre_audit_time: float = 0.0
+    _cached_pre_audit: Optional[Dict[str, Any]] = None
+
+    @classmethod
+    def pre_audit_frame(cls, image_path: str) -> Dict[str, Any]:
+        """
+        PRE-INFERENCE VLM GATE (Before YOLO runs):
+        Visually inspects the camera frame to verify if genuine agricultural plant foliage exists.
+        Immediately rejects:
+          - Synthetic screens, text canvases, mock UI, error messages
+          - Human faces, indoor rooms, walls, floors, keyboards, clothing
+          - Non-agricultural objects and non-plant backgrounds
+        """
+        key = _get_groq_key()
+        if not key:
+            return {"is_plant_foliage": True, "verdict": "PASSED", "ai_audited": False}
+
+        now = time.time()
+        if now - cls._last_pre_audit_time < 1.5 and cls._cached_pre_audit is not None:
+            return cls._cached_pre_audit
+
+        try:
+            with open(image_path, "rb") as f:
+                img_data = f.read()
+
+            system_prompt = (
+                "You are an expert plant pathologist and autonomous UAV vision gatekeeper for Project Jatayu. "
+                "Your role is to strictly inspect camera frames and REJECT any non-agricultural or non-plant scenes: "
+                "such as computer screens, UI mockups, text canvases, error screens, indoor rooms, walls, furniture, "
+                "people, clothing, vehicles, or artificial objects. "
+                "You MUST only allow genuine living agricultural plant foliage, crop fields, or plant leaves to proceed. "
+                "Output valid JSON only."
+            )
+
+            user_prompt = """Inspect this camera frame:
+Does this image contain genuine living agricultural plant foliage, crop leaves, or a plant canopy?
+
+Respond strictly in this JSON format:
+{
+  "is_plant_foliage": false,
+  "verdict": "REJECTED",
+  "reasoning": "<1-sentence concise description of what is visible in the frame>"
+}"""
+
+            raw = _groq_vision_chat(_get_vlm_model(), system_prompt, user_prompt, img_data, max_tokens=150)
+            if raw:
+                parsed = _parse_json_response(raw)
+                if parsed:
+                    is_leaf = bool(parsed.get("is_plant_foliage", False))
+                    v_str = str(parsed.get("verdict", "")).upper()
+                    if "REJECT" in v_str or not is_leaf:
+                        is_leaf = False
+                        verdict = "REJECTED"
+                    else:
+                        verdict = "VERIFIED"
+
+                    res = {
+                        "is_plant_foliage": is_leaf,
+                        "verdict": verdict,
+                        "reasoning": parsed.get("reasoning", ""),
+                        "ai_audited": True,
+                    }
+                    cls._last_pre_audit_time = now
+                    cls._cached_pre_audit = res
+                    logger.info(f"[Pre-YOLO VLM Gate] verdict={verdict}, is_leaf={is_leaf}, reason={parsed.get('reasoning')}")
+                    return res
+        except Exception as exc:
+            logger.warning(f"[Pre-YOLO VLM Gate] Error: {exc}")
+
+        return {"is_plant_foliage": True, "verdict": "PASSED", "ai_audited": False}
+
+    @classmethod
+    def post_verify_detection(
+        cls,
+        image_path: str,
+        crop: str,
+        detected_class: str,
+        confidence: float,
+    ) -> Dict[str, Any]:
+        """
+        POST-INFERENCE VLM VERIFICATION (After YOLO runs):
+        Evaluates the YOLO crop & disease detection with Groq Vision.
+        Verifies clinical symptom presence, determines scientific pathogen name,
+        and assigns severity.
+        """
+        key = _get_groq_key()
+        if not key:
+            return {"verdict": "UNAUDITED", "pathogen_name": None, "severity": "MODERATE", "ai_audited": False}
+
+        try:
+            with open(image_path, "rb") as f:
+                img_data = f.read()
+
+            system_prompt = (
+                "You are a Senior Plant Pathologist for Project Jatayu. "
+                "Your role is to verify the YOLO crop species and disease classification against the actual leaf evidence in the frame. "
+                "Provide clinical agronomic verification in valid JSON only."
+            )
+
+            user_prompt = f"""Verify this detection on the camera frame:
+YOLO Plant Species : {crop}
+YOLO Classification: {detected_class}
+YOLO Confidence    : {confidence * 100:.1f}%
+
+Respond strictly in this JSON format:
+{{
+  "verdict": "VERIFIED" | "REJECTED" | "UNCERTAIN",
+  "pathogen_name": "<scientific pathogen name if diseased, e.g. Mycosphaerella fijiensis, or 'Healthy Foliage'>",
+  "severity": "LOW" | "MODERATE" | "HIGH" | "CRITICAL",
+  "reasoning": "<1-sentence clinical justification>"
+}}"""
+
+            raw = _groq_vision_chat(_get_vlm_model(), system_prompt, user_prompt, img_data)
+            if raw:
+                parsed = _parse_json_response(raw)
+                if parsed:
+                    verdict = str(parsed.get("verdict", "VERIFIED")).upper()
+                    logger.info(f"[Post-YOLO VLM Audit] verdict={verdict}, pathogen={parsed.get('pathogen_name')}, reason={parsed.get('reasoning')}")
+                    return {
+                        "verdict": verdict,
+                        "pathogen_name": parsed.get("pathogen_name"),
+                        "severity": parsed.get("severity", "MODERATE"),
+                        "reasoning": parsed.get("reasoning", ""),
+                        "ai_audited": True,
+                    }
+        except Exception as exc:
+            logger.warning(f"[Post-YOLO VLM Audit] Error: {exc}")
+
+        return {"verdict": "UNAUDITED", "pathogen_name": None, "severity": "MODERATE", "ai_audited": False}
+
+    @classmethod
+    def audit_image_frame(
+        cls,
+        image_path: str,
+        crop_candidate: str,
+        detected_class: str,
+        confidence: float,
+    ) -> Dict[str, Any]:
+        """Backwards-compatible wrapper around post_verify_detection."""
+        return cls.post_verify_detection(image_path, crop_candidate, detected_class, confidence)
 
     @classmethod
     def audit_detection(
@@ -161,6 +468,7 @@ class VLMAuditService:
         confidence: float,
         zone: Optional[str] = None,
         extra_context: Optional[str] = None,
+        image_base64: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Audits a single key YOLO detection.
@@ -187,7 +495,16 @@ Respond ONLY with this JSON:
   "severity": "LOW" | "MODERATE" | "HIGH" | "CRITICAL"
 }}"""
 
-        raw = _groq_chat(model, cls.SYSTEM_PROMPT, user_prompt, max_tokens=512)
+        raw = None
+        if image_base64:
+            try:
+                img_bytes = base64.b64decode(image_base64)
+                raw = _groq_vision_chat(model, cls.SYSTEM_PROMPT, user_prompt, img_bytes)
+            except Exception as e:
+                logger.warning(f"[AIService] Failed to parse image_base64 for audit: {e}")
+
+        if not raw:
+            raw = _groq_chat(model, cls.SYSTEM_PROMPT, user_prompt, max_tokens=512)
 
         if raw:
             parsed = _parse_json_response(raw)

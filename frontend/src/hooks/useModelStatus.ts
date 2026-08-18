@@ -14,7 +14,7 @@ export type ModelStatus = {
 };
 
 const POLL_INTERVAL_MS = 2000;
-const BACKEND_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BACKEND_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
 
 const DEFAULT: ModelStatus = {
   ready: false,

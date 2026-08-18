@@ -1,10 +1,10 @@
-"use client";
 import React, { useState } from "react";
 import {
   Cpu, Zap, HardDrive, RefreshCw, CheckCircle2,
-  AlertTriangle, Box, Layers, ArrowRight, RotateCcw, Activity
+  AlertTriangle, Box, Layers, ArrowRight, RotateCcw, Activity, Sparkles, Bot
 } from "lucide-react";
 import { useModelRegistry, ChildModelInfo } from "@/hooks/useModelRegistry";
+import { useGroqStatus } from "@/hooks/useGroqStatus";
 import styles from "./ModelsDashboard.module.css";
 
 const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
@@ -98,6 +98,7 @@ function ChildModelCard({
 // ── Main Dashboard ────────────────────────────────────────────────────────────
 export default function ModelsDashboard() {
   const registry = useModelRegistry();
+  const groqStatus = useGroqStatus();
   const { parent, children, total_available, total_loaded, loading, error, refresh } = registry;
   const [awakeningCrop, setAwakeningCrop] = useState<string | null>(null);
   const [resetting, setResetting] = useState(false);
@@ -278,6 +279,72 @@ export default function ModelsDashboard() {
         )}
       </div>
 
+      {/* ── Two-Stage Groq AI LLM / VLM Reasoning Engines Card ── */}
+      <div className={styles.parentCard} style={{ border: "1px solid rgba(56, 189, 248, 0.25)" }}>
+        <div className={styles.parentHeader}>
+          <div className={styles.parentTitle}>
+            <Sparkles size={18} color="#38BDF8" />
+            <div>
+              <div className={styles.parentTitleText}>MULTIMODAL AI LLM &amp; VLM REASONING ENGINES</div>
+              <div className={styles.parentSubtext}>
+                Two-stage cognitive validation · Zero-shot vision gatekeeper &amp; agronomic report synthesizer
+              </div>
+            </div>
+          </div>
+          <span
+            className={`${styles.statusBadge} ${
+              groqStatus.configured ? styles.statusOnline : styles.statusMock
+            }`}
+          >
+            <span
+              className={styles.statusDot}
+              style={{
+                background: groqStatus.configured ? "#10B981" : "#FBBF24",
+                boxShadow: groqStatus.configured ? "0 0 8px #10B981" : "none",
+              }}
+            />
+            {groqStatus.configured ? "GROQ LLM ACTIVE" : "KEY REQUIRED"}
+          </span>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: "10px", marginTop: "4px" }}>
+          {/* Stage 1: VLM Audit */}
+          <div style={{ background: "rgba(11, 16, 27, 0.85)", border: "1px solid rgba(56, 189, 248, 0.2)", borderRadius: "8px", padding: "12px 14px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "10px", fontFamily: "var(--font-hud)", fontWeight: 700, color: "#38BDF8" }}>
+                STAGE 1: REAL-TIME VLM VISION GATE
+              </span>
+              <span style={{ fontSize: "9px", fontFamily: "var(--font-hud)", color: groqStatus.configured ? "#34D399" : "#FBBF24", background: groqStatus.configured ? "rgba(16, 185, 129, 0.12)" : "rgba(245, 158, 11, 0.12)", padding: "2px 6px", borderRadius: "4px", border: groqStatus.configured ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)" }}>
+                {groqStatus.configured ? "● READY" : "STANDBY"}
+              </span>
+            </div>
+            <div style={{ fontSize: "13px", fontFamily: "monospace", fontWeight: 700, color: "#F8FAFC" }}>
+              {groqStatus.vlm_model || "qwen/qwen3.6-27b"}
+            </div>
+            <div style={{ fontSize: "10.5px", color: "var(--text-muted)", lineHeight: 1.4 }}>
+              Pre-inference non-plant scene filtering &amp; real-time clinical symptom verification.
+            </div>
+          </div>
+
+          {/* Stage 2: Report Engine */}
+          <div style={{ background: "rgba(11, 16, 27, 0.85)", border: "1px solid rgba(52, 211, 153, 0.2)", borderRadius: "8px", padding: "12px 14px", display: "flex", flexDirection: "column", gap: "6px" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: "10px", fontFamily: "var(--font-hud)", fontWeight: 700, color: "#34D399" }}>
+                STAGE 2: AGRONOMY REPORT ENGINE
+              </span>
+              <span style={{ fontSize: "9px", fontFamily: "var(--font-hud)", color: groqStatus.configured ? "#34D399" : "#FBBF24", background: groqStatus.configured ? "rgba(16, 185, 129, 0.12)" : "rgba(245, 158, 11, 0.12)", padding: "2px 6px", borderRadius: "4px", border: groqStatus.configured ? "1px solid rgba(16, 185, 129, 0.3)" : "1px solid rgba(245, 158, 11, 0.3)" }}>
+                {groqStatus.configured ? "● READY" : "STANDBY"}
+              </span>
+            </div>
+            <div style={{ fontSize: "13px", fontFamily: "monospace", fontWeight: 700, color: "#F8FAFC" }}>
+              {groqStatus.report_model || "llama-3.1-8b-instant"}
+            </div>
+            <div style={{ fontSize: "10.5px", color: "var(--text-muted)", lineHeight: 1.4 }}>
+              End-of-mission pathology synthesis, chemical &amp; biological prescriptions, and drone spray grid plans.
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* ── Child Models Header ── */}
       <div className={styles.childrenHeader}>

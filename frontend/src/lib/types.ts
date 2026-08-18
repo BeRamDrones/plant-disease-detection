@@ -60,14 +60,15 @@ export const DISEASE_COLORS: Record<string, string> = {
   unknown:         "#5E6D88",
 };
 
-// Plant classes from parent model (best.pt)
+// Plant classes from parent model ensemble (Parent1 + Parent2 + Parent3) and all child specialists
 const CROP_CLASSES = new Set([
-  "apple", "banana", "bittergourd", "blueberry", "cashew", "cassava",
-  "castorbean", "coconut", "coffee", "coriander", "corn", "eggplant",
-  "fennel", "grape", "guava", "jackfruit", "mango", "moringa", "neem",
-  "notaleaf", "papaya", "peach", "pepperbell", "pomegranate", "potato",
-  "raspberry", "sesame", "soybean", "sunflower", "sweetpotato", "tobacco",
-  "tomato"
+  "apple", "banana", "bittergourd", "blueberry", "brinjal", "cashew", "cassava",
+  "castorbean", "cauliflower", "cherry", "coconut", "coffee", "coriander",
+  "corn", "eggplant", "fennel", "grape", "groundnut", "guava", "jackfruit",
+  "juniper", "lemon", "mango", "moringa", "neem", "notaleaf", "papaya",
+  "peach", "peanut", "pepperbell", "pomegranate", "potato", "pumkin", "pumpkin",
+  "raspberry", "rice", "rose", "sesame", "soya", "soyabean", "soybean",
+  "strawberry", "sugarcane", "sunflower", "sweetpotato", "tobacco", "tomato", "wheat"
 ]);
 
 export function diseaseColor(cls: string): string {
@@ -78,10 +79,10 @@ export function diseaseColor(cls: string): string {
     return "#38BDF8"; // Sky teal for crop ID
   }
   
-  if (["rust", "blight", "scab", "rot", "wilt", "measles", "gumming"].some(d => norm.includes(d))) {
+  if (["rust", "blight", "scab", "rot", "wilt", "blast", "smut", "canker", "blackleg", "sheath", "dead", "measles", "gumming", "dieback"].some(d => norm.includes(d))) {
     return "#EF4444"; // Red for critical diseases
   }
-  if (["spot", "mildew", "virus", "anthracnose", "miner", "mold", "mosaic", "sigatoka"].some(d => norm.includes(d))) {
+  if (["spot", "mildew", "virus", "anthracnose", "miner", "mold", "mosaic", "sigatoka", "mite", "weevil", "aphid", "caterpillar", "bakanae", "tungro", "streak", "curl", "holes"].some(d => norm.includes(d))) {
     return "#F59E0B"; // Amber for moderate/high diseases
   }
   
@@ -97,8 +98,8 @@ export function severityLabel(cls: string): string {
   if (norm === "notaleaf") return "NOT A LEAF";
   if (CROP_CLASSES.has(norm)) return "CROP ID";
   
-  if (["rust", "blight", "bacterialwilt", "scab", "rot", "measles", "gumming"].some(d => norm.includes(d))) return "CRITICAL";
-  if (["spot", "anthracnose", "virus", "mildew", "miner", "mold", "mosaic", "sigatoka"].some(d => norm.includes(d))) return "HIGH";
+  if (["rust", "blight", "bacterialwilt", "wilt", "blast", "smut", "canker", "scab", "rot", "blackleg", "sheath", "dead", "measles", "gumming", "dieback"].some(d => norm.includes(d))) return "CRITICAL";
+  if (["spot", "anthracnose", "virus", "mildew", "miner", "mold", "mosaic", "sigatoka", "mite", "weevil", "aphid", "bakanae", "tungro", "streak", "curl"].some(d => norm.includes(d))) return "HIGH";
   return "MODERATE";
 }
 
@@ -110,10 +111,34 @@ export function getTreatmentAdvisory(cls: string): { action: string; remedy: str
       remedy: "Foliage verified healthy. Continue scheduled UAV mission flights and irrigation cycles."
     };
   }
+  if (norm.includes("blast") || norm.includes("sheath") || norm.includes("bakanae") || norm.includes("tungro")) {
+    return {
+      action: "Rice Pathology Intervention",
+      remedy: "Deploy Tricyclazole / Azoxystrobin spray immediately. Drain excess water and maintain optimal nitrogen balance."
+    };
+  }
+  if (norm.includes("rust")) {
+    return {
+      action: "Immediate Sector Isolation",
+      remedy: "Apply propiconazole or copper hydroxide fungicide immediately. Avoid overhead watering to prevent spore spread."
+    };
+  }
+  if (norm.includes("blight")) {
+    return {
+      action: "Emergency Drone Payload Treatment",
+      remedy: "High risk of rapid crop loss. Deploy systemic fungicide (Mancozeb/Chlorothalonil) and prune infected stems."
+    };
+  }
   if (norm.includes("scab")) {
     return {
       action: "Fungicide Spray & Pruning",
       remedy: "Apply protectant captan or difenoconazole spray. Remove infected leaves and improve canopy ventilation."
+    };
+  }
+  if (norm.includes("canker") || norm.includes("blackleg") || norm.includes("dieback")) {
+    return {
+      action: "Systemic Bactericide Application",
+      remedy: "Apply copper oxychloride with streptomycin sulfate. Disinfect pruning shears to prevent tree-to-tree transmission."
     };
   }
   if (norm.includes("rot")) {
@@ -128,28 +153,16 @@ export function getTreatmentAdvisory(cls: string): { action: string; remedy: str
       remedy: "Apply sulfur-based or potassium bicarbonate spray. Improve air circulation around canopy."
     };
   }
-  if (norm.includes("rust")) {
-    return {
-      action: "Immediate Sector Isolation",
-      remedy: "Apply copper hydroxide fungicide immediately. Avoid overhead watering to prevent spore spread."
-    };
-  }
-  if (norm.includes("blight")) {
-    return {
-      action: "Emergency Drone Payload Treatment",
-      remedy: "High risk of rapid crop loss. Deploy systemic fungicide (Mancozeb/Chlorothalonil) and prune infected stems."
-    };
-  }
-  if (norm.includes("spot")) {
+  if (norm.includes("spot") || norm.includes("sigatoka")) {
     return {
       action: "Canopy Pruning & Bio-Fungicide",
       remedy: "Apply Bacillus subtilis or neem oil extract. Remove fallen foliage from zone perimeter."
     };
   }
-  if (norm.includes("virus") || norm.includes("mosaic")) {
+  if (norm.includes("virus") || norm.includes("mosaic") || norm.includes("curl") || norm.includes("leafroll")) {
     return {
       action: "Vector Control (Aphids/Whiteflies)",
-      remedy: "Viral infection—no direct chemical cure. Destroy infected hosts and control insect vectors."
+      remedy: "Viral infection—no direct chemical cure. Destroy infected hosts and spray neem oil or imidacloprid for insect vector control."
     };
   }
   if (norm.includes("anthracnose")) {
@@ -158,10 +171,10 @@ export function getTreatmentAdvisory(cls: string): { action: string; remedy: str
       remedy: "Apply copper-based fungicides during early morning. Ensure proper soil drainage."
     };
   }
-  if (norm.includes("miner")) {
+  if (norm.includes("miner") || norm.includes("mite") || norm.includes("aphid") || norm.includes("weevil") || norm.includes("caterpillar")) {
     return {
-      action: "Insecticide / Parasitic Wasps",
-      remedy: "Apply abamectin or spinosad. Introduce Diglyphus isaea biological control agents."
+      action: "Targeted Bio-Insecticide / Acaricide",
+      remedy: "Deploy spinosad, abamectin, or neem extract spray to eliminate pest infestation across sector canopy."
     };
   }
   if (norm === "notaleaf") {
@@ -177,8 +190,8 @@ export function getTreatmentAdvisory(cls: string): { action: string; remedy: str
     };
   }
   return {
-    action: "Agronomic Inspection Recommended",
-    remedy: "Anomalous foliage patterns observed. Conduct manual ground truth sample validation."
+    action: "Targeted Agronomic Inspection",
+    remedy: "Consult agronomy field supervisor. Apply broad-spectrum eco-friendly bio-fungicide treatment."
   };
 }
 

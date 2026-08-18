@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Clock, Activity } from "lucide-react";
 import { MissionData } from "@/lib/types";
 import { ModelStatus } from "@/hooks/useModelStatus";
+import { useGroqStatus } from "@/hooks/useGroqStatus";
 import styles from "./MissionHeader.module.css";
 
 interface Props {
@@ -17,6 +18,7 @@ export default function MissionHeader({
   mission, signalStrength, battery, modelStatus, elapsed,
 }: Props) {
   const [timeStr, setTimeStr] = useState<string>("");
+  const groqStatus = useGroqStatus();
 
   useEffect(() => {
     const updateTime = () => {
@@ -77,6 +79,30 @@ export default function MissionHeader({
             {modelStatus.ready
               ? (modelStatus.mock_mode ? "MOCK ENGINE" : `${modelStatus.model_name.toUpperCase()} (${modelStatus.device})`)
               : "INITIALIZING…"}
+          </span>
+        </div>
+        <div className={styles.separator}/>
+        <div className={styles.missionId} title={groqStatus.configured ? `Active Groq LLMs: VLM (${groqStatus.vlm_model}) + Report Engine (${groqStatus.report_model})` : "Groq API key not set"}>
+          <span className={styles.idLabel}>AI LLM / VLM</span>
+          <span
+            className={styles.modelDot}
+            style={{
+              background: groqStatus.configured ? "#10B981" : "#FBBF24",
+              boxShadow: groqStatus.configured ? "0 0 8px #10B981" : "0 0 4px #FBBF24"
+            }}
+          />
+          <span
+            className={styles.idValue}
+            style={{
+              color: groqStatus.configured ? "#34D399" : "#FBBF24",
+              fontSize: "11.5px",
+              fontFamily: "var(--font-hud)",
+              letterSpacing: "0.03em"
+            }}
+          >
+            {groqStatus.configured
+              ? `READY (${groqStatus.vlm_model?.split("/")[1] || "QWEN3.6"} + ${groqStatus.report_model?.split("-")[0]?.toUpperCase() || "LLAMA"})`
+              : "KEY REQUIRED"}
           </span>
         </div>
       </div>

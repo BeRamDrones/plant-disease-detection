@@ -1,0 +1,21 @@
+# Jatayu ML Models and Training Outputs
+Parent_Models/
+Child_Models_best_pt/
+backend/Child_Models/
+training codes/
+# Model weights
+*.pt
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Training outputs
+runs/

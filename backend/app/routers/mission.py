@@ -71,8 +71,8 @@ async def post_detections(
         )
 
     try:
-        async with db.begin():
-            inserted, unmatched = await ingest_detections(db, mission_id, detections)
+        inserted, unmatched = await ingest_detections(db, mission_id, detections)
+        await db.commit()
         return DetectionIngestResponse(inserted=inserted, unmatched=unmatched)
     except Exception as e:
         logger.error(f"Detection ingestion failed for mission {mission_id}: {str(e)}", exc_info=True)
