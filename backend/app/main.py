@@ -1,3 +1,4 @@
+import os
 import logging
 import uvicorn
 from contextlib import asynccontextmanager
@@ -17,18 +18,25 @@ logger = logging.getLogger("app.main")
 
 
 # ---------------------------------------------------------------------------
-# Application lifespan — loads the parent model on startup
+# Application lifespan — loads models via local disk or Hugging Face Hub
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     FastAPI lifespan context manager.
-    Loads the parent model (ParentModel.pt) before the server starts accepting
-    requests, so the frontend's model-status poll resolves quickly.
+    Loads models on startup using local files (if available) or HF Hub.
     """
     logger.info("==" * 30)
     logger.info("Project Jatayu — starting up")
-    logger.info("Loading parent model ensemble from Parent_Models/ …")
+
+    # Log Hugging Face Hub connectivity status
+    hf_token = os.getenv("HF_TOKEN")
+    if hf_token:
+        logger.info(f"✓ HF_TOKEN configured (ends ...{hf_token[-4:]})")
+    else:
+        logger.warning("⚠ HF_TOKEN not set — HF Hub downloads from private repos may fail")
+
+    logger.info("Loading parent model ensemble (local-first, HF Hub fallback) …")
 
     registry = ModelRegistry.get()
     success = registry.load()
@@ -58,14 +66,22 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow the Next.js dev server (port 3000) and any localhost origin
+# ---------------------------------------------------------------------------
+# CORS — allow Next.js dev server, Vercel frontend, and any configured origin
+# ---------------------------------------------------------------------------
+allowed_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    os.getenv("FRONTEND_URL", ""),  # e.g., https://your-project.vercel.app
+]
+
+# Filter out empty strings
+allowed_origins = [origin for origin in allowed_origins if origin]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-    ],
+    allow_origins=allowed_origins if allowed_origins else ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -87,5 +103,7 @@ async def root():
 
 
 if __name__ == "__main__":
-    # Port 8001 — port 8000 is occupied by ndms_backend_service on this machine
-    uvicorn.run("app.main:app", host="127.0.0.1", port=8001, reload=True)
+    # Render assigns dynamic HOST and PORT environment variables
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", 8001))
+    uvicorn.run("app.main:app", host=host, port=port, reload=False)

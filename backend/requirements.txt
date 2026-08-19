@@ -8,7 +8,12 @@ alembic>=1.13.1
 pydantic>=2.6.4
 python-dotenv>=1.0.1
 numpy
-
+huggingface_hub
+torch
+torchvision
+ultralytics
+pillow
+python-multipart
 # For PyTorch model inference (Optional - install appropriate wheel for CPU or CUDA support)
 # torch>=2.2.0
 # torchvision>=0.17.0

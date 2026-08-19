@@ -15,27 +15,109 @@ CHILD_MODELS_DIR  = os.path.join(_BASE_DIR, "Child_Models")
 _PROJECT_ROOT     = os.path.abspath(os.path.join(_BASE_DIR, ".."))           # e:\Project Jatayu\
 PARENT_MODELS_DIR = os.path.join(_PROJECT_ROOT, "Parent_Models")             # e:\Project Jatayu\Parent_Models\
 
+# ---------------------------------------------------------------------------
+# Hugging Face Hub — cloud model source (used when local files are absent)
+# ---------------------------------------------------------------------------
+HF_PARENT_REPO = os.getenv("HF_PARENT_REPO", "BeRam-Plant-Disease/Parent_Models")
+HF_CHILD_REPO  = os.getenv("HF_CHILD_REPO", "BeRam-Plant-Disease/Child-Models")
+
+# Maps parent folder name → HF filename
+_PARENT_HF_FILES = {
+    "Parent1": "Parent_1.pt",
+    "Parent2": "Parent_2.pt",
+    "Parent3": "Parent_3.pt",
+}
+
+# Maps normalized crop name → HF child model filename
+_CHILD_HF_FILES: Dict[str, str] = {
+    "apple": "Apple_best.pt",
+    "banana": "Banana_best.pt",
+    "bittergourd": "Bitter_Gourd_best.pt",
+    "brinjal": "Brinjal_best.pt",
+    "cashew": "Cashew_best.pt",
+    "cassava": "Cassava_best.pt",
+    "cauliflower": "Cauliflower_best.pt",
+    "cherry": "Cherry_best.pt",
+    "coconut": "Coconut_best.pt",
+    "coffee": "Coffee_best.pt",
+    "coriander": "Coriander_best.pt",
+    "corn": "Corn_best.pt",
+    "grape": "Grape_best.pt",
+    "groundnut": "Groundnut_best.pt",
+    "jackfruit": "Jackfruit_best.pt",
+    "juniper": "Juniper_best.pt",
+    "lemon": "Lemon_best.pt",
+    "mango": "Mango_best.pt",
+    "neem": "Neem_best.pt",
+    "papaya": "Papaya_best.pt",
+    "peach": "Peach_best.pt",
+    "pepperbell": "Pepper_Bell_best.pt",
+    "potato": "Potato_best.pt",
+    "pumkin": "Pumkin_best.pt",
+    "rice": "Rice_best.pt",
+    "rose": "Rose_best.pt",
+    "sesame": "Sesame_best.pt",
+    "soyabean": "SoyaBean_best.pt",
+    "strawberry": "Strawberry_best.pt",
+    "sugarcane": "SugarCane_best.pt",
+    "sunflower": "Sunflower_best.pt",
+    "tobacco": "Tobacco_best.pt",
+    "tomato": "Tomato_best.pt",
+    "wheat": "Wheat_best.pt",
+}
+
+
+def _download_from_hf(repo_id: str, filename: str) -> Optional[str]:
+    """
+    Downloads a .pt file from Hugging Face Hub.
+    Returns the local cached path, or None on failure.
+    HF Hub automatically caches downloads — subsequent calls are instant.
+    """
+    try:
+        from huggingface_hub import hf_hub_download
+        hf_token = os.getenv("HF_TOKEN")
+        logger.info(f"[HF Hub] Downloading '{filename}' from '{repo_id}'...")
+        local_path = hf_hub_download(
+            repo_id=repo_id,
+            filename=filename,
+            token=hf_token,
+        )
+        logger.info(f"[HF Hub] Cached at: {local_path}")
+        return local_path
+    except Exception as exc:
+        logger.warning(f"[HF Hub] Failed to download '{filename}' from '{repo_id}': {exc}")
+        return None
+
+
 
 def _discover_parent_models() -> List[Dict[str, str]]:
     """
-    Scans Parent_Models/ for subdirectories containing best.pt weights.
-    Returns a list of dicts: {name, path} sorted by folder name.
-    Falls back to legacy backend/ParentModel.pt if Parent_Models/ is absent.
+    Discovers parent model weights using a hybrid strategy:
+      1. LOCAL-FIRST: Scans Parent_Models/ for subdirectories with .pt files
+      2. HF FALLBACK: If no local models found, downloads from Hugging Face Hub
+      3. LEGACY: Falls back to backend/ParentModel.pt if nothing else works
     """
     entries = []
+
+    # ── Strategy 1: Local filesystem scan ────────────────────────────────────
     if os.path.isdir(PARENT_MODELS_DIR):
         for folder in sorted(os.listdir(PARENT_MODELS_DIR)):
             folder_path = os.path.join(PARENT_MODELS_DIR, folder)
             if not os.path.isdir(folder_path) or folder.lower() in {"temp", "tmp", "__pycache__"}:
                 continue
-            # Look for best.pt, Parent_3.pt, or any valid model .pt inside
+            # Look for Parent_1.pt / Parent_2.pt / Parent_3.pt / best.pt / *.pt
             target_pt = None
             for root, _dirs, files in os.walk(folder_path):
-                if "best.pt" in files:
-                    target_pt = os.path.join(root, "best.pt")
+                named_pt = f"{folder.replace('Parent', 'Parent_')}.pt"
+                alt_named_pt = f"{folder}.pt"
+                if named_pt in files:
+                    target_pt = os.path.join(root, named_pt)
                     break
-                elif "Parent_3.pt" in files:
-                    target_pt = os.path.join(root, "Parent_3.pt")
+                elif alt_named_pt in files:
+                    target_pt = os.path.join(root, alt_named_pt)
+                    break
+                elif "best.pt" in files:
+                    target_pt = os.path.join(root, "best.pt")
                     break
                 else:
                     for f in sorted(files):
@@ -51,11 +133,25 @@ def _discover_parent_models() -> List[Dict[str, str]]:
                     "path": target_pt,
                 })
 
-    if not entries:
-        # Fallback to legacy single model
-        legacy = os.path.join(_BASE_DIR, "ParentModel.pt")
-        if os.path.exists(legacy):
-            entries.append({"name": "ParentModel", "path": legacy})
+    if entries:
+        logger.info(f"[ModelDiscovery] Found {len(entries)} parent model(s) on local disk.")
+        return entries
+
+    # ── Strategy 2: Hugging Face Hub download ────────────────────────────────
+    logger.info("[ModelDiscovery] No local parent models found — trying Hugging Face Hub...")
+    for name, hf_filename in sorted(_PARENT_HF_FILES.items()):
+        local_path = _download_from_hf(HF_PARENT_REPO, hf_filename)
+        if local_path:
+            entries.append({"name": name, "path": local_path})
+
+    if entries:
+        logger.info(f"[ModelDiscovery] Downloaded {len(entries)} parent model(s) from HF Hub.")
+        return entries
+
+    # ── Strategy 3: Legacy fallback ──────────────────────────────────────────
+    legacy = os.path.join(_BASE_DIR, "ParentModel.pt")
+    if os.path.exists(legacy):
+        entries.append({"name": "ParentModel", "path": legacy})
 
     return entries
 
@@ -88,11 +184,11 @@ def _best_device() -> str:
 # ---------------------------------------------------------------------------
 class ChildModelRegistry:
     """
-    Registry for Child Models.
+    Registry for Child Models (hybrid local + HF Hub).
     Child models are NOT loaded at application startup.
     When the parent model classifies an image into a specific crop class (e.g. 'Tomato'),
     ONLY that crop's child model is loaded into memory on demand.
-    No other child models are loaded.
+    If the model is not found locally, it is downloaded from Hugging Face Hub.
     """
     CROP_ALIASES: Dict[str, str] = {
         "eggplant": "brinjal",
@@ -132,50 +228,66 @@ class ChildModelRegistry:
     def find_child_model_path(self, crop_name: str) -> Optional[str]:
         """
         Dynamically resolves the best.pt path for a given crop_name.
+        Strategy: Local-first scan, then HF Hub fallback.
         Matches folder names flexibly (e.g. 'Eggplant' -> 'Brinjal',
         'Soybean' -> 'SoyaBean', 'Pumpkin' -> 'Pumkin', 'Strawberry' -> 'pc1_Strawberry').
         """
-        if not os.path.exists(CHILD_MODELS_DIR):
-            logger.warning(f"[ChildModelRegistry] Child_Models directory not found at: {CHILD_MODELS_DIR}")
-            return None
-
         raw_norm = crop_name.lower().replace("_", "").replace(" ", "").replace("-", "")
         norm_crop = self.CROP_ALIASES.get(raw_norm, raw_norm)
 
         if norm_crop in self._model_paths:
             return self._model_paths[norm_crop]
 
-        for folder in os.listdir(CHILD_MODELS_DIR):
-            folder_path = os.path.join(CHILD_MODELS_DIR, folder)
-            if not os.path.isdir(folder_path) or folder == "Child_Models":
-                continue
+        # ── Strategy 1: Local filesystem scan ────────────────────────────────
+        if os.path.exists(CHILD_MODELS_DIR):
+            for folder in os.listdir(CHILD_MODELS_DIR):
+                folder_path = os.path.join(CHILD_MODELS_DIR, folder)
+                if not os.path.isdir(folder_path) or folder == "Child_Models":
+                    continue
 
-            norm_folder = folder.lower().replace("_", "").replace(" ", "").replace("-", "").replace("pc1", "")
+                norm_folder = folder.lower().replace("_", "").replace(" ", "").replace("-", "").replace("pc1", "")
 
-            if norm_crop == norm_folder or norm_crop in norm_folder or norm_folder in norm_crop:
-                for root, dirs, files in os.walk(folder_path):
-                    if "best.pt" in files:
-                        best_path = os.path.join(root, "best.pt")
-                        self._model_paths[norm_crop] = best_path
-                        self._model_paths[raw_norm] = best_path
-                        return best_path
+                if norm_crop == norm_folder or norm_crop in norm_folder or norm_folder in norm_crop:
+                    for root, dirs, files in os.walk(folder_path):
+                        if "best.pt" in files:
+                            best_path = os.path.join(root, "best.pt")
+                            self._model_paths[norm_crop] = best_path
+                            self._model_paths[raw_norm] = best_path
+                            return best_path
+
+        # ── Strategy 2: Hugging Face Hub fallback ────────────────────────────
+        hf_filename = _CHILD_HF_FILES.get(norm_crop)
+        if hf_filename:
+            local_path = _download_from_hf(HF_CHILD_REPO, hf_filename)
+            if local_path:
+                self._model_paths[norm_crop] = local_path
+                self._model_paths[raw_norm] = local_path
+                return local_path
 
         return None
 
     def get_all_available_crops(self) -> List[str]:
-        """Scans CHILD_MODELS_DIR and returns all crops that have valid best.pt weights."""
-        if not os.path.exists(CHILD_MODELS_DIR):
-            return []
+        """Returns all crops that have valid weights — local or on HF Hub."""
         crops = []
-        for folder in sorted(os.listdir(CHILD_MODELS_DIR)):
-            folder_path = os.path.join(CHILD_MODELS_DIR, folder)
-            if not os.path.isdir(folder_path) or folder == "Child_Models":
-                continue
-            for root, dirs, files in os.walk(folder_path):
-                if "best.pt" in files:
-                    clean_name = folder.replace("pc1_", "").strip()
-                    crops.append(clean_name)
-                    break
+
+        # Local crops
+        if os.path.exists(CHILD_MODELS_DIR):
+            for folder in sorted(os.listdir(CHILD_MODELS_DIR)):
+                folder_path = os.path.join(CHILD_MODELS_DIR, folder)
+                if not os.path.isdir(folder_path) or folder == "Child_Models":
+                    continue
+                for root, dirs, files in os.walk(folder_path):
+                    if "best.pt" in files:
+                        clean_name = folder.replace("pc1_", "").strip()
+                        crops.append(clean_name)
+                        break
+
+        # If no local crops found, enumerate from HF registry
+        if not crops:
+            for norm_name in sorted(_CHILD_HF_FILES.keys()):
+                display = norm_name.capitalize()
+                crops.append(display)
+
         return crops
 
     def get_child_model(self, crop_name: str, device: str) -> Optional[Any]:
