@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+const BACKEND = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8001";
 
 export interface ChildModelInfo {
   folder: string;

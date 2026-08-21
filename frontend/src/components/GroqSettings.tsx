@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import { Key, Bot, ShieldCheck, CheckCircle2, Cpu, Sparkles, RefreshCw, Lock } from "lucide-react";
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+const BACKEND = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8001";
 
 export default function GroqSettings() {
   const [apiKey, setApiKey] = useState("");

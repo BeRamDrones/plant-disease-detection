@@ -9,7 +9,7 @@ import { InputMode } from "./InputModeSelector";
 import { RawDetection } from "@/hooks/useDetections";
 import styles from "./CameraFeed.module.css";
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+const BACKEND = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8001";
 
 interface Props {
   lat: number;

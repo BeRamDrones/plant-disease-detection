@@ -9,7 +9,7 @@ export interface GroqStatus {
   loading: boolean;
 }
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8001";
+const BACKEND = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8001";
 
 export function useGroqStatus(): GroqStatus & { refresh: () => void } {
   const [status, setStatus] = useState<GroqStatus>({

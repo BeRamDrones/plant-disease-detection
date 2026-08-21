@@ -19,51 +19,45 @@ async def model_status():
 @router.get("/model-registry")
 async def model_registry():
     """
-    Returns a full inventory of parent + child models.
-    For each child model directory under Child_Models/, reports:
-      - folder name, display name, whether a best.pt was found,
-        whether it's currently loaded in GPU memory, and its task type / class count.
+    Returns a full inventory of parent + child ONNX models.
+    Scans Models/Child/ for *_int8.onnx files and reports status.
     """
     parent = ModelRegistry.get()
     child_reg = ChildModelRegistry.get()
 
-    # Discover every child model folder
+    # Discover every child ONNX model
     children = []
     if os.path.isdir(CHILD_MODELS_DIR):
-        for folder in sorted(os.listdir(CHILD_MODELS_DIR)):
-            folder_path = os.path.join(CHILD_MODELS_DIR, folder)
-            if not os.path.isdir(folder_path) or folder == "Child_Models":
+        for filename in sorted(os.listdir(CHILD_MODELS_DIR)):
+            if not filename.endswith("_int8.onnx"):
                 continue
 
-            # Resolve display name (strip pc1_ prefix, replace underscores)
-            display = folder.replace("pc1_", "").replace("_", " ")
+            filepath = os.path.join(CHILD_MODELS_DIR, filename)
 
-            # Check if a best.pt exists anywhere inside the folder
-            weights_path = None
-            for root, _dirs, files in os.walk(folder_path):
-                if "best.pt" in files:
-                    weights_path = os.path.join(root, "best.pt")
-                    break
+            # Extract display name: "Apple_best_int8.onnx" -> "Apple"
+            display = filename.replace("_best_int8.onnx", "").replace("_int8.onnx", "")
+            display = display.replace("_", " ")
 
-            norm = folder.lower().replace("_", "").replace(" ", "").replace("-", "").replace("pc1", "")
+            # Check if loaded in memory
+            norm = display.lower().replace(" ", "").replace("_", "").replace("-", "")
             is_loaded = norm in child_reg._loaded_models
 
-            # If loaded, extract task / class count from the live model object
+            # If loaded, extract metadata from the live session wrapper
             task = None
             class_count = None
             class_names = None
             if is_loaded:
-                model = child_reg._loaded_models[norm]
-                task = getattr(model, "task", "detect")
-                names = getattr(model, "names", {})
+                model_info = child_reg._loaded_models[norm]
+                task = model_info.get("task", "detect")
+                names = model_info.get("names", {})
                 class_count = len(names)
                 class_names = list(names.values()) if len(names) <= 30 else list(names.values())[:30]
 
             children.append({
-                "folder":       folder,
+                "folder":       filename,
                 "display_name": display,
-                "has_weights":  weights_path is not None,
-                "weights_path": weights_path,
+                "has_weights":  True,
+                "weights_path": filepath,
                 "is_loaded":    is_loaded,
                 "task":         task,
                 "class_count":  class_count,
@@ -83,7 +77,7 @@ async def model_registry():
 @router.post("/infer/image")
 async def infer_image(file: UploadFile = File(...)):
     """
-    Accepts an image upload and runs inference with the parent model pipeline.
+    Accepts an image upload and runs inference with the ONNX pipeline.
     Returns detected classes, confidence scores, and plant class.
     """
     registry = ModelRegistry.get()
@@ -114,9 +108,7 @@ async def infer_image(file: UploadFile = File(...)):
 @router.post("/infer/video-frame")
 async def infer_video_frame(file: UploadFile = File(...)):
     """
-    Accepts a single extracted video frame (JPEG/PNG) and runs inference.
-    The frontend extracts frames from a video at N-second intervals and
-    calls this endpoint for each frame.
+    Accepts a single extracted video frame (JPEG/PNG) and runs ONNX inference.
     """
     registry = ModelRegistry.get()
     if not registry.is_ready:
@@ -146,24 +138,23 @@ async def infer_video_frame(file: UploadFile = File(...)):
 @router.post("/awaken/{crop_name}")
 async def awaken_child(crop_name: str):
     """
-    Manually awakens / loads a specific crop's child model into memory.
-    Ideal for client demonstrations to show on-demand dynamic loading.
+    Manually awakens / loads a specific crop's child ONNX model into memory.
     """
     device = ModelRegistry.get().device or "cpu"
     child_reg = ChildModelRegistry.get()
-    model = child_reg.awaken_child_model(crop_name, device)
-    if not model:
+    model_info = child_reg.awaken_child_model(crop_name, device)
+    if not model_info:
         raise HTTPException(
             status_code=404,
-            detail=f"No child model folder with weights found for crop '{crop_name}'"
+            detail=f"No child ONNX model found for crop '{crop_name}'"
         )
     return {
         "status": "awoken",
         "crop": crop_name,
         "device": device,
-        "task": getattr(model, "task", "detect"),
-        "class_count": len(getattr(model, "names", {})),
-        "class_names": list(getattr(model, "names", {}).values())[:30],
+        "task": model_info.get("task", "detect"),
+        "class_count": len(model_info.get("names", {})),
+        "class_names": list(model_info.get("names", {}).values())[:30],
         "loaded_models": child_reg.loaded_crops(),
     }
 
