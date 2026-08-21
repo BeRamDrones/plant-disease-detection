@@ -413,11 +413,16 @@ class ChildModelRegistry:
 
         return crops
 
+    MAX_LOADED_CHILDREN: int = 2  # Keeps memory strictly under Render 512MB RAM limit
+
     def get_child_model(self, crop_name: str, device: str = "cpu") -> Optional[Dict[str, Any]]:
         """
         Retrieves or dynamically loads the child ONNX model for the classified crop_name.
         Returns a dict with {session, names, imgsz, stride, task, path} or None.
+        Enforces MAX_LOADED_CHILDREN limit to fit inside Render's 512MB RAM limit.
         """
+        import gc
+
         raw_norm = crop_name.lower().replace("_", "").replace(" ", "").replace("-", "")
         norm_crop = self.CROP_ALIASES.get(raw_norm, raw_norm)
 
@@ -426,6 +431,23 @@ class ChildModelRegistry:
             return self._loaded_models[norm_crop]
         if raw_norm in self._loaded_models:
             return self._loaded_models[raw_norm]
+
+        # Enforce LRU Memory Limit for Render (512MB RAM)
+        # Drop oldest loaded child model before loading a new one
+        unique_loaded = list(set(id(info) for info in self._loaded_models.values()))
+        if len(unique_loaded) >= self.MAX_LOADED_CHILDREN:
+            # Find key of oldest loaded model to remove
+            keys_to_remove = []
+            oldest_id = unique_loaded[0]
+            for k, info in list(self._loaded_models.items()):
+                if id(info) == oldest_id:
+                    keys_to_remove.append(k)
+
+            for k in keys_to_remove:
+                del self._loaded_models[k]
+
+            gc.collect()
+            logger.info(f"[ChildModelRegistry] Evicted oldest child model from memory to preserve RAM (Limit: {self.MAX_LOADED_CHILDREN}).")
 
         model_path = self.find_child_model_path(crop_name)
         if not model_path:
