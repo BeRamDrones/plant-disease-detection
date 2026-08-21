@@ -3,6 +3,7 @@ Parent_Models/
 Child_Models_best_pt/
 backend/Child_Models/
 training codes/
+Models/
 # Model weights
 *.pt
 
