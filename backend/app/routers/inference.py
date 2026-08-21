@@ -1,7 +1,8 @@
+import io, gc, tempfile, os, logging
+from PIL import Image
 from fastapi import APIRouter, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse
-from app.services.inference import ModelRegistry, ChildModelRegistry, CHILD_MODELS_DIR, pipeline
-import tempfile, os, logging
+from app.services.inference import ModelRegistry, ChildModelRegistry, CHILD_MODELS_DIR, pipeline, HF_PARENT_REPO, _download_from_hf
 
 router = APIRouter(prefix="/inference", tags=["Inference"])
 logger = logging.getLogger("app.routers.inference")
@@ -10,7 +11,7 @@ logger = logging.getLogger("app.routers.inference")
 @router.get("/model-status")
 async def model_status():
     """
-    Returns the current readiness of the parent model (best.pt).
+    Returns the current readiness of the parent model.
     Frontend polls this endpoint every 2 s until ready == true.
     """
     return ModelRegistry.get().status()
@@ -72,6 +73,40 @@ async def model_registry():
         "total_loaded": sum(1 for c in children if c["is_loaded"]),
     }
 
+
+@router.post("/predict")
+async def run_inference_predict(file: UploadFile = File(...)):
+    """
+    Direct prediction endpoint: reads image, collects garbage to free RAM,
+    executes ONNX pipeline inference and returns predictions.
+    """
+    try:
+        # Clear RAM before running inference
+        gc.collect()
+
+        # Read uploaded image bytes
+        image_bytes = await file.read()
+        
+        # Save upload to a temp file for pipeline execution
+        suffix = os.path.splitext(file.filename or "upload.jpg")[1] or ".jpg"
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(image_bytes)
+                tmp_path = tmp.name
+
+            predictions = pipeline.run_inference(tmp_path)
+            return {
+                "status": "success",
+                "model_used": "Parent_1_int8.onnx",
+                "predictions": predictions
+            }
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+    except Exception as e:
+        logger.error(f"Inference error in /predict: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/infer/image")
