@@ -37,12 +37,14 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠ HF_TOKEN not set — HF Hub downloads from private repos may fail")
 
-    logger.info("Configuring ModelRegistry for lazy on-demand loading...")
-    
-    # Initialize the registry but bypass the heavy `.load()` step that caused the memory crash
+    logger.info("Initializing ModelRegistry parent ONNX ensemble...")
     registry = ModelRegistry.get()
+    try:
+        registry.load()
+        logger.info(f"✓ Parent ensemble ready ({registry.model_name}) — accepting inference requests")
+    except Exception as exc:
+        logger.error(f"⚠ Failed to pre-load parent ONNX models during startup: {exc}")
     
-    logger.info("✓ Backend ready — waiting for API requests to initialize ONNX engine")
     logger.info("==" * 30)
 
     yield  # Application is running

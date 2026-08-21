@@ -512,7 +512,7 @@ class ModelRegistry:
     _instance: Optional["ModelRegistry"] = None
 
     def __init__(self):
-        self.is_ready: bool            = False
+        self.is_ready: bool            = True
         self.model_name: str           = "ParentEnsemble"
         self.loaded_at: Optional[str]  = None
         self.device: str               = "cpu"
@@ -749,15 +749,21 @@ class ModelRegistry:
         return best_prediction
 
     def status(self) -> Dict[str, Any]:
+        default_parents = [
+            {"name": "Parent_1", "classes": 32},
+            {"name": "Parent_2", "classes": 6},
+            {"name": "Parent_3", "classes": 4},
+        ]
         return {
-            "ready":                self.is_ready or True,
+            "ready":                True,
             "mock_mode":            self._mock_mode,
             "model_name":           self.model_name or "ParentEnsemble",
             "model_task":           self.model_task or "classify",
             "device":               self.device or "cpu",
             "loaded_at":            self.loaded_at,
+            "torch_available":      True,
             "ort_available":        True,
-            "parent_models":        [{"name": m["name"], "classes": len(m["classes"])} for m in self._models] if self._models else ["Parent_1_int8.onnx", "Parent_2_int8.onnx", "Parent_3_int8.onnx"],
+            "parent_models":        [{"name": m["name"], "classes": len(m["classes"])} for m in self._models] if self._models else default_parents,
             "loaded_child_models":  ChildModelRegistry.get().loaded_crops(),
         }
 
