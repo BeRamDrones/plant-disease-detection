@@ -926,24 +926,20 @@ class DiseaseDetectionPipeline:
                 except Exception as exc:
                     logger.warning(f"[Two-Phase Pipeline] {p_name} candidate extraction error: {exc}")
 
-            # -- Step 2: Specialized Child Model Probing
+            # -- Step 2: Specialized Child Model Probing (Fast top-2 candidate evaluation)
             best_child_crop = None
             best_child_conf = 0.0
             best_child_detections: List[Dict[str, Any]] = []
 
-            # Prioritize candidates that have child models
+            # Probe ONLY the top candidates identified by the Parent Ensemble (max 2 models)
             child_probe_list: List[str] = []
             for c_name, conf, p_name in candidate_crops:
                 if self._child_registry.find_child_model_path(c_name) and c_name not in child_probe_list:
                     child_probe_list.append(c_name)
+                if len(child_probe_list) >= 2:
+                    break
 
-            # If top candidates did not find child models, also probe all available
-            all_available_children = self._child_registry.get_all_available_crops()
-            for c in all_available_children:
-                if c not in child_probe_list and self._child_registry.find_child_model_path(c):
-                    child_probe_list.append(c)
-
-            for crop_name in child_probe_list[:8]:
+            for crop_name in child_probe_list:
                 child_info = self._child_registry.get_child_model(crop_name)
                 if child_info is None:
                     continue
