@@ -18,13 +18,14 @@ logger = logging.getLogger("app.main")
 
 
 # ---------------------------------------------------------------------------
-# Application lifespan — loads models via local disk or Hugging Face Hub
+# Application lifespan — UPDATED FOR LAZY LOADING (Fixes Render OOM)
 # ---------------------------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     FastAPI lifespan context manager.
-    Loads models on startup using local files (if available) or HF Hub.
+    Initializes the app without pre-loading models into RAM to respect Render's 512MB limit.
+    Models will be loaded lazily on-demand during the first inference request.
     """
     logger.info("==" * 30)
     logger.info("Project Jatayu — starting up")
@@ -36,16 +37,12 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠ HF_TOKEN not set — HF Hub downloads from private repos may fail")
 
-    logger.info("Loading parent model ensemble (local-first, HF Hub fallback) …")
-
+    logger.info("Configuring ModelRegistry for lazy on-demand loading...")
+    
+    # Initialize the registry but bypass the heavy `.load()` step that caused the memory crash
     registry = ModelRegistry.get()
-    success = registry.load()
-
-    if success:
-        logger.info(f"✓ Parent ensemble ready ({registry.model_name}) — accepting inference requests")
-    else:
-        logger.warning("⚠ Model load encountered issues — running in Mock Mode")
-
+    
+    logger.info("✓ Backend ready — waiting for API requests to initialize ONNX engine")
     logger.info("==" * 30)
 
     yield  # Application is running
@@ -60,20 +57,22 @@ app = FastAPI(
     title="Project Jatayu Backend",
     description=(
         "FastAPI + PostgreSQL/PostGIS backend for drone-based plant disease detection. "
-        "Parent model: ParentModel.pt (crop classifier) → child models (disease specialists)."
+        "Running optimized INT8 ONNX models with lazy-loading execution."
     ),
     version="2.0.0",
     lifespan=lifespan,
 )
 
 # ---------------------------------------------------------------------------
-# CORS — allow Next.js dev server, Vercel frontend, and any configured origin
+# CORS — dynamically handles trailing slashes that block Vercel requests
 # ---------------------------------------------------------------------------
+raw_frontend_url = os.getenv("FRONTEND_URL", "https://plant-disease-detection-ten-bay.vercel.app")
+
 allowed_origins = [
     "http://localhost:3000",
     "http://127.0.0.1:3000",
     "http://localhost:3001",
-    os.getenv("FRONTEND_URL", ""),  # e.g., https://your-project.vercel.app
+    raw_frontend_url.rstrip("/"),  # Strips the trailing slash to prevent CORS blocking
 ]
 
 # Filter out empty strings
@@ -98,7 +97,7 @@ async def root():
     return {
         "status": "online",
         "message": "Project Jatayu Backend v2 is active.",
-        "model": ModelRegistry.get().status(),
+        "model": "Lazy-loading ONNX initialized"
     }
 
 
