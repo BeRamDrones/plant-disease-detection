@@ -21,49 +21,42 @@ async def model_status():
 async def model_registry():
     """
     Returns a full inventory of parent + child ONNX models.
-    Scans Models/Child/ for *_int8.onnx files and reports status.
+    Discovers all available crops locally or from Hugging Face Hub.
     """
     parent = ModelRegistry.get()
     child_reg = ChildModelRegistry.get()
 
-    # Discover every child ONNX model
+    crops = child_reg.get_all_available_crops()
     children = []
-    if os.path.isdir(CHILD_MODELS_DIR):
-        for filename in sorted(os.listdir(CHILD_MODELS_DIR)):
-            if not filename.endswith("_int8.onnx"):
-                continue
 
-            filepath = os.path.join(CHILD_MODELS_DIR, filename)
+    for crop in crops:
+        norm = crop.lower().replace(" ", "").replace("_", "").replace("-", "")
+        is_loaded = norm in child_reg._loaded_models
 
-            # Extract display name: "Apple_best_int8.onnx" -> "Apple"
-            display = filename.replace("_best_int8.onnx", "").replace("_int8.onnx", "")
-            display = display.replace("_", " ")
+        task = "detect"
+        class_count = None
+        class_names = None
 
-            # Check if loaded in memory
-            norm = display.lower().replace(" ", "").replace("_", "").replace("-", "")
-            is_loaded = norm in child_reg._loaded_models
+        if is_loaded:
+            model_info = child_reg._loaded_models.get(norm, {})
+            task = model_info.get("task", "detect")
+            names = model_info.get("names", {})
+            class_count = len(names)
+            class_names = list(names.values())[:30] if names else None
 
-            # If loaded, extract metadata from the live session wrapper
-            task = None
-            class_count = None
-            class_names = None
-            if is_loaded:
-                model_info = child_reg._loaded_models[norm]
-                task = model_info.get("task", "detect")
-                names = model_info.get("names", {})
-                class_count = len(names)
-                class_names = list(names.values()) if len(names) <= 30 else list(names.values())[:30]
+        filename = f"{crop.replace(' ', '_')}_best_int8.onnx"
+        weights_path = child_reg.find_child_model_path(crop)
 
-            children.append({
-                "folder":       filename,
-                "display_name": display,
-                "has_weights":  True,
-                "weights_path": filepath,
-                "is_loaded":    is_loaded,
-                "task":         task,
-                "class_count":  class_count,
-                "class_names":  class_names,
-            })
+        children.append({
+            "folder":       filename,
+            "display_name": crop,
+            "has_weights":  True,
+            "weights_path": weights_path,
+            "is_loaded":    is_loaded,
+            "task":         task,
+            "class_count":  class_count,
+            "class_names":  class_names,
+        })
 
     return {
         "parent": parent.status(),
