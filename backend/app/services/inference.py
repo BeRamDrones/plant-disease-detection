@@ -948,11 +948,13 @@ class DiseaseDetectionPipeline:
 
             # -- Groq VLM Visual Frame Audit Gate
             try:
+                import asyncio
                 from app.services.ai_service import _get_groq_key, VLMAuditService
                 if _get_groq_key() and final_dets:
                     top_det = final_dets[0]
-                    logger.info(f"[VLM Audit] Running Groq visual audit for crop='{crop_name}', detected='{top_det['detected_class']}'...")
-                    vis_audit = VLMAuditService.audit_image_frame(
+                    logger.info(f"[VLM Audit] Running non-blocking Groq visual audit for crop='{crop_name}', detected='{top_det['detected_class']}'...")
+                    vis_audit = await asyncio.to_thread(
+                        VLMAuditService.audit_image_frame,
                         image_path=image_path,
                         crop_candidate=crop_name,
                         detected_class=top_det["detected_class"],
