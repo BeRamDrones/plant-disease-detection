@@ -40,6 +40,30 @@ _PARENT_HF_FILES = {
     "Parent_3": "Parent_3_int8.onnx",
 }
 
+# Static parent model metadata — avoids heavy onnx.load protobuf parsing at startup
+_PARENT_METADATA = {
+    "Parent_1": {
+        "names": {
+            0: "Apple", 1: "Banana", 2: "BitterGourd", 3: "Blueberry", 4: "Cashew",
+            5: "Cassava", 6: "CastorBean", 7: "Coconut", 8: "Coffee", 9: "Coriander",
+            10: "Corn", 11: "Eggplant", 12: "Fennel", 13: "Grape", 14: "Guava",
+            15: "Jackfruit", 16: "Mango", 17: "Moringa", 18: "Neem", 19: "NotALeaf",
+            20: "Papaya", 21: "Peach", 22: "PepperBell", 23: "Pomegranate", 24: "Potato",
+            25: "Raspberry", 26: "Sesame", 27: "Soybean", 28: "Sunflower", 29: "SweetPotato",
+            30: "Tobacco", 31: "Tomato"
+        },
+        "task": "classify", "imgsz": [640, 640], "stride": 32
+    },
+    "Parent_2": {
+        "names": {0: "Cauliflower", 1: "Cherry", 2: "Lemon", 3: "Pumpkin", 4: "Rice", 5: "Wheat"},
+        "task": "classify", "imgsz": [640, 640], "stride": 32
+    },
+    "Parent_3": {
+        "names": {0: "Groundnut", 1: "Rose", 2: "Strawberry", 3: "SugarCane"},
+        "task": "classify", "imgsz": [640, 640], "stride": 32
+    }
+}
+
 # Maps normalized crop name → HF child model filename (ONNX)
 _CHILD_HF_FILES: Dict[str, str] = {
     "apple": "Apple_best_int8.onnx",
@@ -289,7 +313,7 @@ def _discover_parent_models() -> List[Dict[str, Any]]:
             if filename.endswith("_int8.onnx"):
                 filepath = os.path.join(PARENT_MODELS_DIR, filename)
                 display_name = filename.replace("_int8.onnx", "")
-                metadata = _load_onnx_metadata(filepath)
+                metadata = _PARENT_METADATA.get(display_name) or _load_onnx_metadata(filepath)
                 entries.append({
                     "name": display_name,
                     "path": filepath,
@@ -305,7 +329,7 @@ def _discover_parent_models() -> List[Dict[str, Any]]:
     for name, hf_filename in sorted(_PARENT_HF_FILES.items()):
         local_path = _download_from_hf(HF_PARENT_REPO, hf_filename)
         if local_path:
-            metadata = _load_onnx_metadata(local_path)
+            metadata = _PARENT_METADATA.get(name) or _load_onnx_metadata(local_path)
             entries.append({"name": name, "path": local_path, "metadata": metadata})
 
     if entries:
