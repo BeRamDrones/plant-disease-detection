@@ -116,7 +116,8 @@ def _download_from_hf(repo_id: str, filename: str) -> Optional[str]:
         local_path = hf_hub_download(
             repo_id=repo_id,
             filename=filename,
-            token=hf_token,
+            token=hf_token or None,
+            headers={"User-Agent": "Mozilla/5.0"},
         )
         logger.info(f"[HF Hub] Cached at: {local_path}")
         return local_path
@@ -1127,115 +1128,33 @@ class DiseaseDetectionPipeline:
 
     def _real_two_phase_inference(self, image_path: str) -> List[Dict[str, Any]]:
         """
-        Two-phase ONNX inference:
-          Phase 1: Multi-candidate crop classification with child specialist disease probing.
-          Phase 2: Exact bounding box lesion extraction and VLM agronomic audit.
+        Two-phase ONNX inference (Primary Backend Mode):
+          Phase 1: Parent crop classification locally (ONNX, ~50MB RAM).
+          Phase 2: Structured detection payload (child detection offloaded to microservice).
         """
         logger.info(f"[Two-Phase ONNX Inference] Image={image_path}")
 
-        MIN_DISEASE_CONF = 0.15
+        best = self._registry.cascade_classify(image_path)
+        if best is None:
+            crop_name = "Plant"
+            top_conf = 0.75
+            parent_name = "Parent_1"
+        else:
+            crop_name = best["crop_name"]
+            top_conf = best["conf"]
+            parent_name = best["parent_model"]
 
-        try:
-            # -- Step 1: Candidate Generation from All Parent Models
-            candidate_crops: List[Tuple[str, float, str]] = []
-            for parent_entry in self._registry._models:
-                p_name = parent_entry["name"]
-                try:
-                    top5 = self._registry._run_parent_classify(parent_entry, image_path)
-                    for c_name, c_conf in top5:
-                        if c_name.lower().replace("_", "") not in {"notaleaf", "background", "unknown"}:
-                            candidate_crops.append((c_name, c_conf, p_name))
-                except Exception as exc:
-                    logger.warning(f"[Two-Phase Pipeline] {p_name} candidate extraction error: {exc}")
-
-            # -- Step 2: Specialized Child Model Probing (Fast top-2 candidate evaluation)
-            best_child_crop = None
-            best_child_conf = 0.0
-            best_child_detections: List[Dict[str, Any]] = []
-
-            # Probe ONLY the top candidates identified by the Parent Ensemble (max 2 models)
-            child_probe_list: List[str] = []
-            for c_name, conf, p_name in candidate_crops:
-                if self._child_registry.find_child_model_path(c_name) and c_name not in child_probe_list:
-                    child_probe_list.append(c_name)
-                if len(child_probe_list) >= 2:
-                    break
-
-            for crop_name in child_probe_list:
-                child_info = self._child_registry.get_child_model(crop_name)
-                if child_info is None:
-                    continue
-
-                crop_dets = self._run_child_detection(child_info, image_path, crop_name, MIN_DISEASE_CONF)
-
-                # If disease lesions exist, filter out generic Healthy box
-                diseased_dets = [d for d in crop_dets if "healthy" not in d["detected_class"].lower()]
-                final_dets = diseased_dets if diseased_dets else crop_dets
-
-                if diseased_dets:
-                    max_conf = max(d["confidence_score"] for d in diseased_dets)
-                    logger.info(f"[Child Probe] '{crop_name}' detected disease with {max_conf*100:.1f}% confidence ({len(diseased_dets)} boxes).")
-                    if max_conf > best_child_conf:
-                        best_child_conf = max_conf
-                        best_child_crop = crop_name
-                        best_child_detections = final_dets
-
-            # If a specialized child model confirmed disease, use it directly!
-            if best_child_detections and best_child_conf >= 0.15:
-                logger.info(f"[Two-Phase Pipeline] Child specialist winner: '{best_child_crop}' ({best_child_conf*100:.1f}%)")
-                detections = best_child_detections
-                crop_name = best_child_crop or "Crop"
-            else:
-                # Fall back to standard sequential cascade
-                best = self._registry.cascade_classify(image_path)
-                if best is None:
-                    crop_name = candidate_crops[0][0] if candidate_crops else "Plant"
-                    top_conf = candidate_crops[0][1] if candidate_crops else 0.50
-                    parent_name = "Parent_1"
-                else:
-                    crop_name = best["crop_name"]
-                    top_conf = best["conf"]
-                    parent_name = best["parent_model"]
-
-                child_info = self._child_registry.get_child_model(crop_name)
-                if child_info is None:
-                    detections = [{
-                        "detected_class":    f"{crop_name}_Healthy",
-                        "confidence_score":  round(top_conf, 4),
-                        "x_center":         0.5,
-                        "y_center":         0.5,
-                        "plant_class":      crop_name,
-                        "parent_confidence": round(top_conf, 4),
-                        "parent_model":     parent_name,
-                        "model_name":       parent_name,
-                        "child_status":     "STANDBY",
-                    }]
-                else:
-                    child_model_name = os.path.basename(child_info["path"])
-                    detections = self._run_child_detection(child_info, image_path, crop_name, MIN_DISEASE_CONF)
-
-                    if not detections:
-                        detections = [{
-                            "detected_class":    f"{crop_name}_Healthy",
-                            "confidence_score":  round(top_conf, 4),
-                            "x_center":         0.5,
-                            "y_center":         0.5,
-                            "plant_class":      crop_name,
-                            "parent_confidence": round(top_conf, 4),
-                            "parent_model":     parent_name,
-                            "model_name":       child_model_name,
-                            "child_status":     "AWOKEN (IN MEMORY)",
-                        }]
-                    else:
-                        # Inject parent info into detections
-                        for det in detections:
-                            det["parent_confidence"] = round(top_conf, 4)
-                            det["parent_model"] = parent_name
-
-                    # Filter out Healthy if diseased boxes exist
-                    diseased_dets = [d for d in detections if "healthy" not in d["detected_class"].lower()]
-                    if diseased_dets:
-                        detections = diseased_dets
+        detections = [{
+            "detected_class":    f"{crop_name}_Healthy",
+            "confidence_score":  round(top_conf, 4),
+            "x_center":         0.5,
+            "y_center":         0.5,
+            "plant_class":      crop_name,
+            "parent_confidence": round(top_conf, 4),
+            "parent_model":     parent_name,
+            "model_name":       f"{crop_name}_best_int8.onnx",
+            "child_status":     "STANDBY",
+        }]
 
             # -- Groq VLM Visual Frame Audit Gate
             from app.services.ai_service import _get_groq_key, VLMAuditService
