@@ -85,7 +85,7 @@ async def run_inference_predict(file: UploadFile = File(...)):
                 tmp.write(image_bytes)
                 tmp_path = tmp.name
 
-            predictions = pipeline.run_inference(tmp_path)
+            predictions = await pipeline.async_run_inference(tmp_path)
             crop = predictions[0].get("plant_class", "Unknown") if predictions else "Unknown"
             return {
                 "status": "success",
@@ -117,7 +117,7 @@ async def run_inference_pipeline(file: UploadFile = File(...)):
                 tmp.write(image_bytes)
                 tmp_path = tmp.name
 
-            predictions = pipeline.run_inference(tmp_path)
+            predictions = await pipeline.async_run_inference(tmp_path)
             crop = predictions[0].get("plant_class", "Unknown") if predictions else "Unknown"
             return {
                 "status": "success",
@@ -149,7 +149,7 @@ async def infer_image(file: UploadFile = File(...)):
             tmp.write(contents)
             tmp_path = tmp.name
 
-        results = pipeline.run_inference(tmp_path)
+        results = await pipeline.async_run_inference(tmp_path)
         return {"status": "ok", "detections": results, "filename": file.filename}
     except Exception as exc:
         logger.error(f"Image inference error: {exc}", exc_info=True)
