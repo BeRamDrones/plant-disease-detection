@@ -39,6 +39,16 @@ async def lifespan(app: FastAPI):
 
     logger.info("Configuring ModelRegistry for lazy on-demand initialization...")
     registry = ModelRegistry.get()
+
+    # Verify/create Neon Database tables on startup
+    try:
+        from app.core.database import engine, Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        logger.info("✓ Neon Database tables verified/created successfully.")
+    except Exception as db_err:
+        logger.warning(f"⚠ Neon Database initialization notice: {db_err}")
+
     logger.info("✓ Primary backend ready — port bound immediately to pass Render health checks")
     logger.info("==" * 30)
 
