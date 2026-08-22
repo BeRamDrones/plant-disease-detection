@@ -1,0 +1,38 @@
+services:
+  # ── Primary Backend (Parent ONNX ensemble + API) ─────────────────────────
+  - type: web
+    name: plant-disease-detection
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: HF_TOKEN
+        sync: false
+      - key: HF_PARENT_REPO
+        value: BeRam-Plant-Disease/Parent_Models
+      - key: HF_CHILD_REPO
+        value: BeRam-Plant-Disease/Child-Models
+      - key: CHILD_SERVICE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GROQ_VLM_MODEL
+        value: qwen/qwen3.6-27b
+      - key: GROQ_REPORT_MODEL
+        value: llama-3.1-8b-instant
+      - key: FRONTEND_URL
+        sync: false
+
+  # ── Child Model Microservice (Disease detection ONNX) ────────────────────
+  - type: web
+    name: plant-disease-detection-child
+    runtime: python
+    rootDir: model-service
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: HF_TOKEN
+        sync: false
+      - key: HF_CHILD_REPO
+        value: BeRam-Plant-Disease/Child-Models

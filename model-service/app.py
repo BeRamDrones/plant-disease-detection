@@ -1,65 +1,101 @@
+"""
+model-service/app.py — Project Jatayu Child Inference Microservice
+Runs on a separate Render instance (512MB RAM).
+Loads ONE child ONNX model at a time from Hugging Face Hub, runs disease detection, returns predictions.
+"""
 import io
-import os
 import gc
+import os
+import logging
+
 from PIL import Image
-from functools import lru_cache
 from fastapi import FastAPI, File, UploadFile, HTTPException
-from huggingface_hub import hf_hub_download
+from fastapi.middleware.cors import CORSMiddleware
 
-# Import your PureONNX engine. 
-# Adjust this path if your engine file is located elsewhere in your directory.
-from app.services.onnx_engine import PureONNX
+# Import PureONNX engine (same directory — no package import needed)
+from onnx_engine import load_child_model, _CHILD_HF_FILES
 
-app = FastAPI(title="Project Jatayu - Model Inference Service")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
+logger = logging.getLogger("child_service")
 
-# Repositories containing your 3 Parent and 34 Child INT8 ONNX models
-HF_PARENT_REPO = "BeRam-Plant-Disease/Parent_Models"
-HF_CHILD_REPO = "BeRam-Plant-Disease/Child-Models"
-HF_TOKEN = os.getenv("HF_TOKEN")
+app = FastAPI(title="Project Jatayu — Child Model Inference Microservice")
 
-@lru_cache(maxsize=1)  # CRITICAL: Changed from 3 to 1 to fit inside Render's 512MB RAM limit
-def get_model(is_parent: bool, model_name: str):
-    # Force Python to clear previous model memory before loading a new one
-    gc.collect()
-    
-    repo_id = HF_PARENT_REPO if is_parent else HF_CHILD_REPO
-    
-    # Ensure incoming requests map to the optimized ONNX format, not .pt
-    base_name = model_name.replace('.pt', '').replace('_int8.onnx', '')
-    filename = f"{base_name}_int8.onnx"
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    print(f"Fetching {filename} from Hugging Face ({repo_id})...")
-    model_path = hf_hub_download(
-        repo_id=repo_id, 
-        filename=filename,
-        token=HF_TOKEN
-    )
-    
-    # Initialize your custom ONNX engine instead of torch.hub
-    model = PureONNX(model_path)
-    return model
+# Single active model slot (LRU: only 1 child loaded at a time to fit 512MB RAM)
+_current_model = None
+_current_crop: str = ""
+
+
+def _get_or_load_model(crop_name: str):
+    global _current_model, _current_crop
+    norm = crop_name.lower().replace(" ", "").replace("_", "").replace("-", "")
+    if _current_crop == norm and _current_model is not None:
+        logger.info(f"[Cache] Reusing loaded model for '{crop_name}'")
+        return _current_model
+    # Evict current model before loading new one
+    if _current_model is not None:
+        logger.info(f"[Cache] Evicting '{_current_crop}' — loading '{norm}'")
+        _current_model = None
+        gc.collect()
+    _current_model = load_child_model(crop_name)
+    _current_crop = norm
+    return _current_model
+
 
 @app.get("/")
 def health_check():
-    return {"status": "Jatayu Model Inference Service is running in ONNX Mode"}
+    return {
+        "status": "online",
+        "service": "Project Jatayu Child Inference Microservice",
+        "mode": "ONNX Runtime (INT8)",
+        "active_model": _current_crop or "none",
+        "available_crops": sorted(_CHILD_HF_FILES.keys()),
+    }
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "active_model": _current_crop or "none"}
+
 
 @app.post("/predict")
-async def predict(is_parent: bool, model_name: str, file: UploadFile = File(...)):
+async def predict(
+    crop_name: str,
+    file: UploadFile = File(...),
+):
+    """
+    Accepts: crop_name (query param) + image file (multipart)
+    Returns: unified predictions JSON with detected disease bounding boxes
+    """
     try:
+        gc.collect()
         image_bytes = await file.read()
-        image = Image.open(io.BytesIO(image_bytes))
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
 
-        # Lazy load the ONNX model (drops the old one automatically)
-        model = get_model(is_parent, model_name)
-        
-        # Run inference using your PureONNX class
-        # (Note: PyTorch's results.pandas().xyxy[0] is no longer needed here)
-        results = model.predict(image) 
+        model = _get_or_load_model(crop_name)
+        if model is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No child model available for crop '{crop_name}'. Check HF repo."
+            )
 
+        predictions = model.predict(image, crop_name=crop_name)
         return {
             "status": "success",
-            "model_used": f"{model_name}_int8.onnx",
-            "predictions": results
+            "crop_name": crop_name,
+            "model_used": f"{crop_name}_best_int8.onnx",
+            "predictions": predictions,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error(f"Prediction error for '{crop_name}': {exc}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc))
