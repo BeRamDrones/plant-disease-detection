@@ -206,28 +206,29 @@ async def generate_ai_report_summary(payload: dict, db: AsyncSession = Depends(g
 
     # Fetch mission session detections directly from Neon DB if available
     db_detections = []
-    try:
-        stmt = select(ParentModelDiseaseClassification).where(
-            ParentModelDiseaseClassification.mission_id == mission_id
-        ).order_by(ParentModelDiseaseClassification.detected_at.desc())
-        res = await db.execute(stmt)
-        db_rows = res.scalars().all()
-        if db_rows:
-            db_detections = [
-                {
-                    "detected_class": row.detected_class,
-                    "confidence_score": row.confidence_score,
-                    "lat": row.lat,
-                    "lon": row.lon,
-                    "model_version": row.model_version,
-                    "detected_at": row.detected_at.isoformat() if row.detected_at else None,
-                    "plant_class": crop_class or "Crop",
-                }
-                for row in db_rows
-            ]
-            logger.info(f"[Neon DB] Fetched {len(db_detections)} session detection(s) from Neon DB for mission #{mission_id}.")
-    except Exception as db_exc:
-        logger.warning(f"[Neon DB] Session fetch notice: {db_exc}")
+    if db is not None:
+        try:
+            stmt = select(ParentModelDiseaseClassification).where(
+                ParentModelDiseaseClassification.mission_id == mission_id
+            ).order_by(ParentModelDiseaseClassification.detected_at.desc())
+            res = await db.execute(stmt)
+            db_rows = res.scalars().all()
+            if db_rows:
+                db_detections = [
+                    {
+                        "detected_class": row.detected_class,
+                        "confidence_score": row.confidence_score,
+                        "lat": row.lat,
+                        "lon": row.lon,
+                        "model_version": row.model_version,
+                        "detected_at": row.detected_at.isoformat() if row.detected_at else None,
+                        "plant_class": crop_class or "Crop",
+                    }
+                    for row in db_rows
+                ]
+                logger.info(f"[Neon DB] Fetched {len(db_detections)} session detection(s) from Neon DB for mission #{mission_id}.")
+        except Exception as db_exc:
+            logger.warning(f"[Neon DB] Session fetch notice: {db_exc}")
 
     final_dets = db_detections if db_detections else detections
 

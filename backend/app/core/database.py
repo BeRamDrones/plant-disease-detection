@@ -22,10 +22,17 @@ AsyncSessionLocal = async_sessionmaker(
 class Base(DeclarativeBase):
     pass
 
-# Async DB session dependency
+import logging
+logger = logging.getLogger("app.core.database")
+
+# Async DB session dependency with fallback error protection
 async def get_db():
-    async with AsyncSessionLocal() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
+    try:
+        async with AsyncSessionLocal() as session:
+            try:
+                yield session
+            finally:
+                await session.close()
+    except Exception as exc:
+        logger.warning(f"[Database] Async session error: {exc}")
+        yield None
