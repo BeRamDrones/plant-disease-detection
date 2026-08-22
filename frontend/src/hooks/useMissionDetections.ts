@@ -7,7 +7,7 @@ const DEMO_MISSION: MissionData = {
   drone_id:    "AG-DRONE-001",
   phase:       "detection",
   status:      "in_progress",
-  crop_class:  "wheat",
+  crop_class:  undefined,
   created_at:  new Date(Date.now() - 18 * 60_000).toISOString(),
   updated_at:  new Date().toISOString(),
 };
