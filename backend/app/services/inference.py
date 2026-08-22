@@ -12,7 +12,7 @@ logger = logging.getLogger("app.services.inference")
 # ---------------------------------------------------------------------------
 # Child Microservice — separate Render service URL
 # ---------------------------------------------------------------------------
-CHILD_SERVICE_URL = os.getenv("CHILD_SERVICE_URL", "").rstrip("/")
+CHILD_SERVICE_URL = os.getenv("CHILD_SERVICE_URL", "https://plant-disease-detection-child.onrender.com").rstrip("/")
 
 # ---------------------------------------------------------------------------
 # Path resolution — Models/ directory at project root
@@ -815,12 +815,13 @@ class DiseaseDetectionPipeline:
                 logger.info(f"[Pre-Inference LLM Filter] Frame discarded before ONNX: {pre_check.get('reasoning')} -- skipped inference.")
                 return []
 
-        if self._registry._mock_mode or self._registry._model is None:
-            return self._mock_results(image_path)
-
         # If child microservice URL is configured, use it for Phase 2
-        if CHILD_SERVICE_URL:
-            return self._run_with_child_microservice(image_path)
+        if CHILD_SERVICE_URL and CHILD_SERVICE_URL.startswith("http"):
+            try:
+                return self._run_with_child_microservice(image_path)
+            except Exception as exc:
+                logger.warning(f"[Pipeline] Child microservice dispatch error: {exc} -- falling back to local ONNX pipeline.")
+                return self._real_two_phase_inference(image_path)
 
         return self._real_two_phase_inference(image_path)
 
