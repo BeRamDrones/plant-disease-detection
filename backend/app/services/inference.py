@@ -859,27 +859,22 @@ class DiseaseDetectionPipeline:
         except Exception:
             return self._run_with_child_microservice(image_path)
 
-    async def async_run_inference(self, image_path: str) -> List[Dict[str, Any]]:
+    async def async_run_inference(self, image_path: str, skip_vlm: bool = False) -> List[Dict[str, Any]]:
         """
         Non-blocking async two-phase inference pipeline.
         Phase 1: Local ONNX parent crop classification.
-        Phase 2: Async HTTP dispatch to child Render microservice using httpx.AsyncClient.
+        Phase 2: Remote ONNX child disease detection microservice + optional Groq VLM audit.
         """
-        if not self._registry.is_ready:
-            logger.warning("[Pipeline] Model not ready -- returning empty result.")
-            return []
-
-        # If child microservice URL is configured, use async microservice dispatcher
         if CHILD_SERVICE_URL and CHILD_SERVICE_URL.startswith("http"):
             try:
-                return await self._async_run_with_child_microservice(image_path)
+                return await self._async_run_with_child_microservice(image_path, skip_vlm=skip_vlm)
             except Exception as exc:
                 logger.warning(f"[Pipeline] Async child microservice dispatch error: {exc} -- falling back to local ONNX pipeline.")
                 return self._real_two_phase_inference(image_path)
 
         return self._real_two_phase_inference(image_path)
 
-    async def _async_run_with_child_microservice(self, image_path: str) -> List[Dict[str, Any]]:
+    async def _async_run_with_child_microservice(self, image_path: str, skip_vlm: bool = False) -> List[Dict[str, Any]]:
         """
         Hybrid pipeline (Non-blocking Async):
           Phase 1: Run parent crop classification locally on primary backend (ONNX, ~60MB RAM).
@@ -946,31 +941,32 @@ class DiseaseDetectionPipeline:
                 "pathogen_name": None, "severity": "LOW", "ai_audited": False,
             }]
 
-            # -- Groq VLM Visual Frame Audit Gate
-            try:
-                import asyncio
-                from app.services.ai_service import _get_groq_key, VLMAuditService
-                if _get_groq_key() and final_dets:
-                    top_det = final_dets[0]
-                    logger.info(f"[VLM Audit] Running non-blocking Groq visual audit for crop='{crop_name}', detected='{top_det['detected_class']}'...")
-                    vis_audit = await asyncio.to_thread(
-                        VLMAuditService.audit_image_frame,
-                        image_path=image_path,
-                        crop_candidate=crop_name,
-                        detected_class=top_det["detected_class"],
-                        confidence=top_det["confidence_score"],
-                    )
-                    if vis_audit:
-                        top_det["vlm_verdict"] = vis_audit.get("verdict", "CONFIRMED")
-                        top_det["vlm_reasoning"] = vis_audit.get("reasoning", "")
-                        top_det["ai_audited"] = True
-                        if vis_audit.get("verdict") == "OVERRIDDEN":
-                            override_class = vis_audit.get("vlm_suggested_class")
-                            if override_class:
-                                logger.info(f"[VLM Audit] Overriding class from '{top_det['detected_class']}' to '{override_class}' based on Groq visual inspection.")
-                                top_det["detected_class"] = override_class
-            except Exception as vlm_exc:
-                logger.warning(f"[VLM Audit] Async frame audit error: {vlm_exc}")
+            if not skip_vlm:
+                # -- Groq VLM Visual Frame Audit Gate
+                try:
+                    import asyncio
+                    from app.services.ai_service import _get_groq_key, VLMAuditService
+                    if _get_groq_key() and final_dets:
+                        top_det = final_dets[0]
+                        logger.info(f"[VLM Audit] Running non-blocking Groq visual audit for crop='{crop_name}', detected='{top_det['detected_class']}'...")
+                        vis_audit = await asyncio.to_thread(
+                            VLMAuditService.audit_image_frame,
+                            image_path=image_path,
+                            crop_candidate=crop_name,
+                            detected_class=top_det["detected_class"],
+                            confidence=top_det["confidence_score"],
+                        )
+                        if vis_audit:
+                            top_det["vlm_verdict"] = vis_audit.get("verdict", "CONFIRMED")
+                            top_det["vlm_reasoning"] = vis_audit.get("reasoning", "")
+                            top_det["ai_audited"] = True
+                            if vis_audit.get("verdict") == "OVERRIDDEN":
+                                override_class = vis_audit.get("vlm_suggested_class")
+                                if override_class:
+                                    logger.info(f"[VLM Audit] Overriding class from '{top_det['detected_class']}' to '{override_class}' based on Groq visual inspection.")
+                                    top_det["detected_class"] = override_class
+                except Exception as vlm_exc:
+                    logger.warning(f"[VLM Audit] Async frame audit error: {vlm_exc}")
 
             return final_dets
 
