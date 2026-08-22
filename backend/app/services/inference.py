@@ -933,7 +933,7 @@ class DiseaseDetectionPipeline:
                 det.setdefault("severity", "HIGH")
                 det.setdefault("ai_audited", False)
 
-            return detections if detections else [{
+            final_dets = detections if detections else [{
                 "detected_class":    f"{crop_name}_Healthy",
                 "confidence_score":  round(top_conf, 4),
                 "x_center": 0.5, "y_center": 0.5,
@@ -945,6 +945,32 @@ class DiseaseDetectionPipeline:
                 "vlm_verdict": "UNAUDITED", "vlm_reasoning": "",
                 "pathogen_name": None, "severity": "LOW", "ai_audited": False,
             }]
+
+            # -- Groq VLM Visual Frame Audit Gate
+            try:
+                from app.services.ai_service import _get_groq_key, VLMAuditService
+                if _get_groq_key() and final_dets:
+                    top_det = final_dets[0]
+                    logger.info(f"[VLM Audit] Running Groq visual audit for crop='{crop_name}', detected='{top_det['detected_class']}'...")
+                    vis_audit = VLMAuditService.audit_image_frame(
+                        image_path=image_path,
+                        crop_candidate=crop_name,
+                        detected_class=top_det["detected_class"],
+                        confidence=top_det["confidence_score"],
+                    )
+                    if vis_audit:
+                        top_det["vlm_verdict"] = vis_audit.get("verdict", "CONFIRMED")
+                        top_det["vlm_reasoning"] = vis_audit.get("reasoning", "")
+                        top_det["ai_audited"] = True
+                        if vis_audit.get("verdict") == "OVERRIDDEN":
+                            override_class = vis_audit.get("vlm_suggested_class")
+                            if override_class:
+                                logger.info(f"[VLM Audit] Overriding class from '{top_det['detected_class']}' to '{override_class}' based on Groq visual inspection.")
+                                top_det["detected_class"] = override_class
+            except Exception as vlm_exc:
+                logger.warning(f"[VLM Audit] Async frame audit error: {vlm_exc}")
+
+            return final_dets
 
         except Exception as exc:
             logger.error(f"[Child Microservice] Async request to {CHILD_SERVICE_URL} failed: {exc}")

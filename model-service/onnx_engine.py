@@ -137,7 +137,7 @@ def _numpy_nms(boxes: np.ndarray, scores: np.ndarray, iou_threshold: float) -> L
     return keep
 
 
-def _nms_postprocess(raw_output: np.ndarray, num_classes: int, conf_threshold: float = 0.15) -> List[Dict]:
+def _nms_postprocess(raw_output: np.ndarray, num_classes: int, conf_threshold: float = 0.05) -> List[Dict]:
     output = raw_output[0] if raw_output.ndim == 4 else raw_output
     if output.ndim == 3:
         output = output[0]
@@ -191,7 +191,7 @@ class PureONNX:
         self.task: str = self.metadata["task"]
         logger.info(f"[PureONNX] Loaded {os.path.basename(model_path)} — task={self.task}, classes={len(self.names)}")
 
-    def predict(self, image: Image.Image, crop_name: str = "Crop", conf_threshold: float = 0.15) -> List[Dict]:
+    def predict(self, image: Image.Image, crop_name: str = "Crop", conf_threshold: float = 0.05) -> List[Dict]:
         """Run inference on a PIL Image. Returns list of detection dicts."""
         input_tensor = _preprocess(image, self.imgsz)
         input_name = self.session.get_inputs()[0].name
