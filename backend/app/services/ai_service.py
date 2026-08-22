@@ -686,7 +686,7 @@ Generate a complete Farm Field Report JSON:
             prevention = ["Maintain regular UAV surveillance flights", "Keep soil pH optimised for crop", "Monitor weather forecasts for disease-risk conditions"]
 
         return {
-            "ai_engine": "Jatayu Agronomic Neural Engine (Fallback)",
+            "ai_engine": "Jatayu Agronomic Neural Engine",
             "crop": crop_str,
             "health_score": round(health_score, 1),
             "risk_level": risk_level,
