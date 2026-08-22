@@ -595,21 +595,22 @@ class AIService:
 
         report_model = _get_report_model()
 
-        if cls.is_configured() and active_diseases:
-            user_prompt = f"""Post-mission farm field disease survey analysis:
+        if cls.is_configured():
+            disease_str = ", ".join(active_diseases) if active_diseases else "None (Healthy Crop Canopy)"
+            user_prompt = f"""Post-mission farm field survey agronomic analysis:
 
 Crop Species      : {crop_str}
 Canopy Health     : {health_score:.1f}%
-Detected Diseases : {", ".join(active_diseases)}
+Detected Diseases : {disease_str}
 Total Detections  : {len(detections)}
 Avg Confidence    : {mean_conf * 100:.1f}%
-Affected Zones    : {len([z for z in zones if z.get("detection_count", 0) > 0])} of {len(zones)} sectors
+Affected Sectors  : {len([z for z in zones if z.get("detection_count", 0) > 0])} of {len(zones) or 8} sectors
 
 Generate a complete Farm Field Report JSON:
 {{
   "executive_summary": "<2-sentence clinical diagnosis>",
   "diagnosis_verification_score": <integer 0-100>,
-  "primary_pathogen": "<scientific name and classification>",
+  "primary_pathogen": "<scientific name and classification, or 'Healthy Foliage'>",
   "chemical_prescription": "<active ingredient + dosage per litre + application method>",
   "organic_remedy": "<organic/biological control agent + dosage>",
   "prevention_steps": ["<step 1>", "<step 2>", "<step 3>"],
@@ -622,15 +623,15 @@ Generate a complete Farm Field Report JSON:
                 parsed = _parse_json_response(raw)
                 if parsed:
                     return {
-                        "ai_engine": f"Groq / {report_model}",
+                        "ai_engine": f"Groq LLaMA ({report_model})",
                         "crop": crop_str,
                         "health_score": round(health_score, 1),
                         "risk_level": risk_level,
                         "risk_color": risk_color,
                         "yield_impact": yield_impact,
                         "executive_summary": parsed.get("executive_summary", ""),
-                        "diagnosis_verification_score": parsed.get("diagnosis_verification_score", 85),
-                        "primary_pathogen": parsed.get("primary_pathogen", active_diseases[0] if active_diseases else "None"),
+                        "diagnosis_verification_score": parsed.get("diagnosis_verification_score", 95),
+                        "primary_pathogen": parsed.get("primary_pathogen", active_diseases[0] if active_diseases else "Healthy Foliage"),
                         "chemical_prescription": parsed.get("chemical_prescription", ""),
                         "biological_remedy": parsed.get("organic_remedy", ""),
                         "prevention_steps": parsed.get("prevention_steps", []),
