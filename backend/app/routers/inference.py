@@ -179,7 +179,7 @@ async def infer_video_frame(file: UploadFile = File(...)):
             tmp.write(contents)
             tmp_path = tmp.name
 
-        results = pipeline.run_inference(tmp_path)
+        results = await pipeline.async_run_inference(tmp_path)
         return {"status": "ok", "detections": results}
     except Exception as exc:
         logger.error(f"Video-frame inference error: {exc}", exc_info=True)

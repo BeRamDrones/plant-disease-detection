@@ -848,6 +848,17 @@ class DiseaseDetectionPipeline:
     def is_loaded(self) -> bool:
         return self._registry.is_ready
 
+    def run_inference(self, image_path: str) -> List[Dict[str, Any]]:
+        """Synchronous wrapper for async_run_inference (backward compatibility)."""
+        import asyncio
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                return self._run_with_child_microservice(image_path)
+            return loop.run_until_complete(self.async_run_inference(image_path))
+        except Exception:
+            return self._run_with_child_microservice(image_path)
+
     async def async_run_inference(self, image_path: str) -> List[Dict[str, Any]]:
         """
         Non-blocking async two-phase inference pipeline.
