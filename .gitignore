@@ -18,5 +18,10 @@ __pycache__/
 venv/
 .venv/
 
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
 # Training outputs
 runs/
