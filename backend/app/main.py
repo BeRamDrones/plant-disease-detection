@@ -78,10 +78,15 @@ allowed_origins = [origin for origin in allowed_origins if origin]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
+    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    return {}
 
 # Register API routers
 app.include_router(utms_router,       prefix="/api")
