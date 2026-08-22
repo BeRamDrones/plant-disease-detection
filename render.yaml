@@ -7,6 +7,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: HF_TOKEN
         sync: false
       - key: HF_PARENT_REPO
@@ -14,7 +16,7 @@ services:
       - key: HF_CHILD_REPO
         value: BeRam-Plant-Disease/Child-Models
       - key: CHILD_SERVICE_URL
-        sync: false
+        value: https://plant-disease-detection-child.onrender.com
       - key: GROQ_API_KEY
         sync: false
       - key: GROQ_VLM_MODEL
@@ -22,7 +24,7 @@ services:
       - key: GROQ_REPORT_MODEL
         value: llama-3.1-8b-instant
       - key: FRONTEND_URL
-        sync: false
+        value: https://plant-disease-detection-theta-nine.vercel.app
 
   # ── Child Model Microservice (Disease detection ONNX) ────────────────────
   - type: web
@@ -32,6 +34,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
       - key: HF_TOKEN
         sync: false
       - key: HF_CHILD_REPO
