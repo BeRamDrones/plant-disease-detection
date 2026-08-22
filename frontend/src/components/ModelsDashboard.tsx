@@ -7,7 +7,7 @@ import { useModelRegistry, ChildModelInfo } from "@/hooks/useModelRegistry";
 import { useGroqStatus } from "@/hooks/useGroqStatus";
 import styles from "./ModelsDashboard.module.css";
 
-const BACKEND = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8001";
+const BACKEND = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "https://plant-disease-detection-32l7.onrender.com";
 
 // ── Child Model Card ──────────────────────────────────────────────────────────
 function ChildModelCard({
