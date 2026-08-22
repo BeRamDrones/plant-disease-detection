@@ -232,11 +232,36 @@ async def generate_ai_report_summary(payload: dict, db: AsyncSession = Depends(g
 
     final_dets = db_detections if db_detections else detections
 
-    return AIService.generate_agronomic_report(
+    report_data = AIService.generate_agronomic_report(
         mission_id=mission_id,
         crop_class=crop_class,
         health_score=health_score,
         detections=final_dets,
         zones=zones
     )
+
+    # Archive generated LLaMA report to Neon DB agronomic_report table
+    if db is not None and report_data:
+        try:
+            from app.models.agronomic_report import AgronomicReport
+            archived = AgronomicReport(
+                mission_id=mission_id,
+                ai_engine=report_data.get("ai_engine", "Jatayu Neural Engine"),
+                crop=report_data.get("crop", crop_class or "Crop"),
+                health_score=float(report_data.get("health_score", health_score)),
+                risk_level=report_data.get("risk_level", "OPTIMAL"),
+                yield_impact=report_data.get("yield_impact", "< 5%"),
+                executive_summary=report_data.get("executive_summary"),
+                primary_pathogen=report_data.get("primary_pathogen"),
+                chemical_prescription=report_data.get("chemical_prescription"),
+                biological_remedy=report_data.get("biological_remedy"),
+                drone_action_plan=report_data.get("drone_action_plan"),
+            )
+            db.add(archived)
+            await db.commit()
+            logger.info(f"[Neon DB] Archived agronomic report record for mission #{mission_id} in Neon DB.")
+        except Exception as archive_exc:
+            logger.warning(f"[Neon DB] Report archiving notice: {archive_exc}")
+
+    return report_data
 

@@ -45,6 +45,7 @@ class Mission(Base):
     drone = relationship("Drone", back_populates="missions")
     zones = relationship("FlightZone", back_populates="mission", cascade="all, delete-orphan")
     detections = relationship("ParentModelDiseaseClassification", back_populates="mission", cascade="all, delete-orphan")
+    reports = relationship("AgronomicReport", back_populates="mission", cascade="all, delete-orphan")
 
     def __repr__(self) -> str:
         return f"<Mission id={self.mission_id} phase={self.phase} status={self.status}>"

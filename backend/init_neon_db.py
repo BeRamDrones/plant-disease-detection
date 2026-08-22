@@ -16,6 +16,7 @@ async def init_db():
     from app.models.mission import Mission, MissionPhase, MissionStatus
     from app.models.flight_zone import FlightZone
     from app.models.detection import ParentModelDiseaseClassification
+    from app.models.agronomic_report import AgronomicReport
     from sqlalchemy.ext.asyncio import AsyncSession
     from sqlalchemy.orm import sessionmaker
     from sqlalchemy import select
@@ -30,7 +31,7 @@ async def init_db():
         async with engine.begin() as conn:
             logger.info("[1/4] Creating table schemas in Neon DB...")
             await conn.run_sync(Base.metadata.create_all)
-            logger.info("✓ Schemas created successfully: drone, mission, flight_zone, parent_model_disease_classification.")
+            logger.info("✓ Schemas created successfully: drone, mission, flight_zone, parent_model_disease_classification, agronomic_report.")
 
         # 2. Seed initial telemetry records if missing
         async_session = sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
