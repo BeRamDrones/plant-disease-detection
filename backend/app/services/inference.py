@@ -324,13 +324,23 @@ def _discover_parent_models() -> List[Dict[str, Any]]:
         logger.info(f"[ModelDiscovery] Found {len(entries)} parent ONNX model(s) in Models/Parent/")
         return entries
 
-    # -- Strategy 2: Hugging Face Hub download
-    logger.info("[ModelDiscovery] No local parent models found -- trying Hugging Face Hub...")
-    for name, hf_filename in sorted(_PARENT_HF_FILES.items()):
-        local_path = _download_from_hf(HF_PARENT_REPO, hf_filename)
-        if local_path:
-            metadata = _PARENT_METADATA.get(name) or _load_onnx_metadata(local_path)
-            entries.append({"name": name, "path": local_path, "metadata": metadata})
+    # -- Strategy 2: Hugging Face Hub download (Fast-track Parent_1)
+    logger.info("[ModelDiscovery] No local parent models found -- downloading Parent_1 from Hugging Face Hub...")
+    p1_filename = _PARENT_HF_FILES.get("Parent_1", "Parent_1_int8.onnx")
+    p1_path = _download_from_hf(HF_PARENT_REPO, p1_filename)
+    if p1_path:
+        entries.append({"name": "Parent_1", "path": p1_path, "metadata": _PARENT_METADATA["Parent_1"]})
+        logger.info(f"[ModelDiscovery] Fast-track Parent_1 ready from HF Hub.")
+        # Best-effort background attempt for Parent_2 and Parent_3
+        for name in ["Parent_2", "Parent_3"]:
+            try:
+                hf_fn = _PARENT_HF_FILES[name]
+                p_path = _download_from_hf(HF_PARENT_REPO, hf_fn)
+                if p_path:
+                    entries.append({"name": name, "path": p_path, "metadata": _PARENT_METADATA[name]})
+            except Exception as _e:
+                logger.warning(f"[ModelDiscovery] Optional '{name}' download skipped: {_e}")
+        return entries
 
     if entries:
         logger.info(f"[ModelDiscovery] Downloaded {len(entries)} parent ONNX model(s) from HF Hub.")
