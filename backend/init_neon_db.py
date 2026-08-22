@@ -41,10 +41,12 @@ async def init_db():
             drone = res.scalar_one_or_none()
 
             if not drone:
+                from datetime import datetime, timezone
                 drone = Drone(
                     drone_id="AG-DRONE-001",
                     model_name="Jatayu-UAV-Pro",
-                    status="active"
+                    status="active",
+                    last_seen_at=datetime.now(timezone.utc),
                 )
                 session.add(drone)
                 await session.commit()

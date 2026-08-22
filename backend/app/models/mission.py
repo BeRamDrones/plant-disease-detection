@@ -15,6 +15,8 @@ class MissionStatus(str, enum.Enum):
     completed = "completed"
     aborted = "aborted"
 
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
+
 class Mission(Base):
     __tablename__ = "mission"
 
@@ -29,8 +31,8 @@ class Mission(Base):
     status = Column(Enum(MissionStatus), nullable=False)
     crop_class = Column(String(100), nullable=True)
     
-    # PostGIS Polygon column
-    boundary_points = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=True)
+    # Polygon boundary GeoJSON string
+    boundary_points = Column(Text, nullable=True)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(

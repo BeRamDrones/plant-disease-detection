@@ -9,7 +9,7 @@ class Drone(Base):
     drone_id = Column(String(100), primary_key=True, index=True)
     model_name = Column(String(150), nullable=False)
     status = Column(String(50), nullable=False)  # e.g., "active", "idle", "maintenance"
-    last_seen_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     missions = relationship("Mission", back_populates="drone", cascade="all, delete-orphan")

@@ -1,6 +1,5 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from geoalchemy2 import Geometry
 from app.core.database import Base
 
 class FlightZone(Base):
@@ -14,8 +13,8 @@ class FlightZone(Base):
         index=True
     )
     
-    # PostGIS Polygon column for the subdivided zone geometry
-    zone_geometry = Column(Geometry(geometry_type="POLYGON", srid=4326), nullable=False)
+    # Polygon zone geometry GeoJSON string
+    zone_geometry = Column(Text, nullable=True)
     zone_label = Column(String(50), nullable=False)
     crop_class = Column(String(100), nullable=True)
 
