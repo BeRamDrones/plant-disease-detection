@@ -1193,7 +1193,8 @@ class DiseaseDetectionPipeline:
             "child_status":     "STANDBY",
         }]
 
-            # -- Groq VLM Visual Frame Audit Gate
+        # -- Groq VLM Visual Frame Audit Gate
+        try:
             from app.services.ai_service import _get_groq_key, VLMAuditService
             if _get_groq_key() and detections:
                 top_det = detections[0]
@@ -1203,23 +1204,21 @@ class DiseaseDetectionPipeline:
                     detected_class=top_det["detected_class"],
                     confidence=top_det["confidence_score"],
                 )
-                if vis_audit.get("verdict") == "REJECTED" or not vis_audit.get("is_crop_leaf", True):
+                if vis_audit and (vis_audit.get("verdict") == "REJECTED" or not vis_audit.get("is_crop_leaf", True)):
                     logger.info(f"[Groq Vision Gate] REJECTED non-plant frame: {vis_audit.get('reasoning')} -- skipping frame.")
                     return []
 
-                # Enrich verified detections
-                for det in detections[:2]:
-                    det["vlm_verdict"]   = vis_audit.get("verdict", "VERIFIED")
-                    det["vlm_reasoning"] = vis_audit.get("reasoning", "")
-                    det["pathogen_name"] = vis_audit.get("pathogen_name")
-                    det["severity"]      = "HIGH" if "healthy" not in det["detected_class"].lower() else "LOW"
-                    det["ai_audited"]    = True
+                if vis_audit:
+                    for det in detections[:2]:
+                        det["vlm_verdict"]   = vis_audit.get("verdict", "VERIFIED")
+                        det["vlm_reasoning"] = vis_audit.get("reasoning", "")
+                        det["pathogen_name"] = vis_audit.get("pathogen_name")
+                        det["severity"]      = "HIGH" if "healthy" not in det["detected_class"].lower() else "LOW"
+                        det["ai_audited"]    = True
+        except Exception as _vlm_err:
+            logger.warning(f"[Groq Vision Gate] Frame audit warning: {_vlm_err}")
 
-            return detections
-
-        except Exception as exc:
-            logger.error(f"[Two-Phase Pipeline] Error during ONNX inference: {exc}", exc_info=True)
-            return []
+        return detections
 
 
 # ---------------------------------------------------------------------------
