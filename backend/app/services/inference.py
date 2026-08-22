@@ -742,11 +742,18 @@ class ModelRegistry:
 
         return results
 
+    def ensure_loaded(self):
+        """Lazy-loads parent ONNX models on demand if not yet loaded."""
+        if not self._models:
+            logger.info("[ModelRegistry] Lazy-loading parent ONNX models on first inference request...")
+            self.load()
+
     def cascade_classify(self, image_path: str) -> Optional[Dict[str, Any]]:
         """
         Multi-parent ONNX ensemble classifier:
         Evaluates all loaded parent models and selects the top crop prediction.
         """
+        self.ensure_loaded()
         best_prediction: Optional[Dict[str, Any]] = None
         highest_conf = 0.0
 

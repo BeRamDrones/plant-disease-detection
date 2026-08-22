@@ -37,14 +37,9 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠ HF_TOKEN not set — HF Hub downloads from private repos may fail")
 
-    logger.info("Initializing ModelRegistry parent ONNX ensemble...")
+    logger.info("Configuring ModelRegistry for lazy on-demand initialization...")
     registry = ModelRegistry.get()
-    try:
-        registry.load()
-        logger.info(f"✓ Parent ensemble ready ({registry.model_name}) — accepting inference requests")
-    except Exception as exc:
-        logger.error(f"⚠ Failed to pre-load parent ONNX models during startup: {exc}")
-    
+    logger.info("✓ Primary backend ready — port bound immediately to pass Render health checks")
     logger.info("==" * 30)
 
     yield  # Application is running
