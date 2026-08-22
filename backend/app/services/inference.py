@@ -838,13 +838,16 @@ class DiseaseDetectionPipeline:
             logger.warning("[Pipeline] Model not ready -- returning empty result.")
             return []
 
-        # -- PRE-INFERENCE VLM GATE (Before ONNX runs)
+        # -- PRE-INFERENCE VLM GATE (Non-blocking safeguard)
         from app.services.ai_service import _get_groq_key, VLMAuditService
         if _get_groq_key():
-            pre_check = VLMAuditService.pre_audit_frame(image_path)
-            if not pre_check.get("is_plant_foliage", True) or pre_check.get("verdict") == "REJECTED":
-                logger.info(f"[Pre-Inference LLM Filter] Frame discarded before ONNX: {pre_check.get('reasoning')} -- skipped inference.")
-                return []
+            try:
+                pre_check = VLMAuditService.pre_audit_frame(image_path)
+                if pre_check and (not pre_check.get("is_plant_foliage", True) or pre_check.get("verdict") == "REJECTED"):
+                    logger.info(f"[Pre-Inference LLM Filter] Frame discarded before ONNX: {pre_check.get('reasoning')} -- skipped inference.")
+                    return []
+            except Exception as exc:
+                logger.warning(f"[Pre-Inference Gate] Non-fatal VLM check error: {exc}")
 
         # If child microservice URL is configured, use it for Phase 2
         if CHILD_SERVICE_URL and CHILD_SERVICE_URL.startswith("http"):
