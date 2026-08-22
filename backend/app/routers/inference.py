@@ -70,17 +70,14 @@ async def model_registry():
 @router.post("/predict")
 async def run_inference_predict(file: UploadFile = File(...)):
     """
-    Direct prediction endpoint: reads image, collects garbage to free RAM,
-    executes ONNX pipeline inference and returns predictions.
+    Primary prediction endpoint.
+    Phase 1: Parent ONNX classifies crop locally (low RAM).
+    Phase 2: Forwards to child Render microservice (if CHILD_SERVICE_URL set), or runs locally.
+    Returns unified JSON: parent crop + child disease bounding boxes.
     """
     try:
-        # Clear RAM before running inference
         gc.collect()
-
-        # Read uploaded image bytes
         image_bytes = await file.read()
-        
-        # Save upload to a temp file for pipeline execution
         suffix = os.path.splitext(file.filename or "upload.jpg")[1] or ".jpg"
         tmp_path = None
         try:
@@ -89,10 +86,12 @@ async def run_inference_predict(file: UploadFile = File(...)):
                 tmp_path = tmp.name
 
             predictions = pipeline.run_inference(tmp_path)
+            crop = predictions[0].get("plant_class", "Unknown") if predictions else "Unknown"
             return {
                 "status": "success",
-                "model_used": "Parent_1_int8.onnx",
-                "predictions": predictions
+                "model_used": "ParentEnsemble + ChildSpecialist",
+                "crop_classified": crop,
+                "predictions": predictions,
             }
         finally:
             if tmp_path and os.path.exists(tmp_path):
@@ -102,21 +101,48 @@ async def run_inference_predict(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/pipeline")
+async def run_inference_pipeline(file: UploadFile = File(...)):
+    """
+    Alias for /predict — used when Next.js is configured with /api/inference/pipeline.
+    Identical two-phase pipeline: parent crop classification + child disease detection.
+    """
+    try:
+        gc.collect()
+        image_bytes = await file.read()
+        suffix = os.path.splitext(file.filename or "upload.jpg")[1] or ".jpg"
+        tmp_path = None
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                tmp.write(image_bytes)
+                tmp_path = tmp.name
+
+            predictions = pipeline.run_inference(tmp_path)
+            crop = predictions[0].get("plant_class", "Unknown") if predictions else "Unknown"
+            return {
+                "status": "success",
+                "model_used": "ParentEnsemble + ChildSpecialist",
+                "crop_classified": crop,
+                "detections": predictions,
+                "predictions": predictions,
+            }
+        finally:
+            if tmp_path and os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+    except Exception as e:
+        logger.error(f"Inference error in /pipeline: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/infer/image")
 async def infer_image(file: UploadFile = File(...)):
     """
     Accepts an image upload and runs inference with the ONNX pipeline.
     Returns detected classes, confidence scores, and plant class.
     """
-    registry = ModelRegistry.get()
-    if not registry.is_ready:
-        raise HTTPException(
-            status_code=503,
-            detail="Model not ready yet. Please wait for the model to finish loading."
-        )
-
-    # Save upload to a temp file so pipeline can read it
+    gc.collect()
     suffix = os.path.splitext(file.filename or "upload.jpg")[1] or ".jpg"
+    tmp_path = None
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
             contents = await file.read()
@@ -129,7 +155,7 @@ async def infer_image(file: UploadFile = File(...)):
         logger.error(f"Image inference error: {exc}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(exc))
     finally:
-        if os.path.exists(tmp_path):
+        if tmp_path and os.path.exists(tmp_path):
             os.unlink(tmp_path)
 
 

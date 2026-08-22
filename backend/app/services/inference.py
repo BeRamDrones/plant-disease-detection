@@ -10,6 +10,11 @@ import numpy as np
 logger = logging.getLogger("app.services.inference")
 
 # ---------------------------------------------------------------------------
+# Child Microservice — separate Render service URL
+# ---------------------------------------------------------------------------
+CHILD_SERVICE_URL = os.getenv("CHILD_SERVICE_URL", "").rstrip("/")
+
+# ---------------------------------------------------------------------------
 # Path resolution — Models/ directory at project root
 # ---------------------------------------------------------------------------
 _BASE_DIR         = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -565,11 +570,17 @@ class ModelRegistry:
 
         try:
             import onnxruntime as ort
+            # Low-memory session options — keeps startup RAM under Render's 512MB limit
+            sess_opts = ort.SessionOptions()
+            sess_opts.enable_cpu_mem_arena = False
+            sess_opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            sess_opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_BASIC
             for entry in entries:
                 try:
                     logger.info(f"[ModelRegistry] Loading parent ONNX model '{entry['name']}': {entry['path']}")
                     session = ort.InferenceSession(
                         entry["path"],
+                        sess_options=sess_opts,
                         providers=["CPUExecutionProvider"],
                     )
                     metadata = entry["metadata"]
@@ -790,6 +801,7 @@ class DiseaseDetectionPipeline:
         """
         Gate: returns [] if model is not ready.
         Executes Pre-Inference VLM Gate, Two-Phase ONNX Detection, and Post-Inference VLM Verification.
+        If CHILD_SERVICE_URL is set, delegates Phase 2 to the child Render microservice.
         """
         if not self._registry.is_ready:
             logger.warning("[Pipeline] Model not ready -- returning empty result.")
@@ -806,7 +818,79 @@ class DiseaseDetectionPipeline:
         if self._registry._mock_mode or self._registry._model is None:
             return self._mock_results(image_path)
 
+        # If child microservice URL is configured, use it for Phase 2
+        if CHILD_SERVICE_URL:
+            return self._run_with_child_microservice(image_path)
+
         return self._real_two_phase_inference(image_path)
+
+    def _run_with_child_microservice(self, image_path: str) -> List[Dict[str, Any]]:
+        """
+        Hybrid pipeline:
+          Phase 1: Run parent crop classification locally (ONNX, low RAM).
+          Phase 2: Forward image + crop name to the child Render microservice via HTTP.
+        Falls back to local two-phase inference if child service is unreachable.
+        """
+        import httpx
+
+        # Phase 1 — classify crop locally
+        best = self._registry.cascade_classify(image_path)
+        if best is None:
+            logger.warning("[Child Microservice] Parent ensemble found no crop — falling back to local pipeline.")
+            return self._real_two_phase_inference(image_path)
+
+        crop_name = best["crop_name"]
+        top_conf  = best["conf"]
+        parent_model = best["parent_model"]
+        logger.info(f"[Child Microservice] Phase 1 complete: crop='{crop_name}' ({top_conf*100:.1f}%) via {parent_model}")
+
+        # Phase 2 — forward to child microservice
+        try:
+            with open(image_path, "rb") as f:
+                image_bytes = f.read()
+
+            suffix = os.path.splitext(image_path)[1] or ".jpg"
+            with httpx.Client(timeout=30.0) as client:
+                logger.info(f"[Child Microservice] Forwarding to {CHILD_SERVICE_URL}/predict?crop_name={crop_name}")
+                response = client.post(
+                    f"{CHILD_SERVICE_URL}/predict",
+                    params={"crop_name": crop_name},
+                    files={"file": (f"frame{suffix}", image_bytes, "image/jpeg")},
+                )
+                response.raise_for_status()
+                child_result = response.json()
+
+            detections = child_result.get("predictions", [])
+            logger.info(f"[Child Microservice] Received {len(detections)} detection(s) for '{crop_name}'.")
+
+            # Inject parent metadata into each detection for frontend compatibility
+            for det in detections:
+                det.setdefault("plant_class", crop_name)
+                det.setdefault("parent_confidence", round(top_conf, 4))
+                det.setdefault("parent_model", parent_model)
+                det.setdefault("child_status", "AWOKEN (IN MEMORY)")
+                det.setdefault("vlm_verdict", "UNAUDITED")
+                det.setdefault("vlm_reasoning", "")
+                det.setdefault("pathogen_name", None)
+                det.setdefault("severity", "HIGH")
+                det.setdefault("ai_audited", False)
+
+            return detections if detections else [{
+                "detected_class":    f"{crop_name}_Healthy",
+                "confidence_score":  round(top_conf, 4),
+                "x_center": 0.5, "y_center": 0.5,
+                "plant_class": crop_name,
+                "parent_confidence": round(top_conf, 4),
+                "parent_model": parent_model,
+                "model_name": f"{crop_name}_best_int8.onnx",
+                "child_status": "AWOKEN (IN MEMORY)",
+                "vlm_verdict": "UNAUDITED", "vlm_reasoning": "",
+                "pathogen_name": None, "severity": "LOW", "ai_audited": False,
+            }]
+
+        except Exception as exc:
+            logger.warning(f"[Child Microservice] Request failed: {exc} — falling back to local pipeline.")
+            return self._real_two_phase_inference(image_path)
 
     def _mock_results(self, image_path: str) -> List[Dict[str, Any]]:
         """Simulated detections for demo / mock-mode environments."""
